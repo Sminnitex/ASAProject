@@ -26,8 +26,13 @@ function select_closest_tile (tiles){
     return closest_tile;
 }
 
-function select_closest_parcel (parcel){
-    
+function tileIsFree(x, y){
+    for (const a of agents.entries){
+        if (x == a['x'] && y == a['y']){
+            return false;
+        }
+    }
+    return true;
 }
 
 
@@ -68,6 +73,13 @@ client.onTile( ( x, y, delivery ) => {
     }
 } );
 
+const agents = new Map();
+client.onAgentsSensing ((perceived_agents) =>{
+    for (const a of perceived_agents){
+        agents.set(a.id, a);
+    }
+})
+
 
 /**
 * BDI Control Loop
@@ -91,6 +103,7 @@ function agentLoop() {
             }
 			continue;  // if someone else is already holding the parcel, skip it
 		}
+        
 		options.push({  // Generate new desire to pick up the parcel
 			desire: 'go_pick_up',
 			args: [parcel]
@@ -102,7 +115,8 @@ function agentLoop() {
      */
 	let best_option;
 	let nearest_distance = Number.MAX_VALUE;
-
+    console.log("-----------------------")
+    console.log(options)
 	for (const option of options){
 		if (option.desire == 'go_pick_up'){
 			let parcel = option.args[0];
@@ -130,6 +144,7 @@ function agentLoop() {
      */
 	if (best_option){
 		myAgent.queue(best_option.desire, best_option.args);  // simply queue it - no logic yet!
+        console.log(best_option);
 	}
 }
 client.onParcelsSensing(agentLoop);  // execute agent loop when sensing parcels TODO: is this the best time?
@@ -145,6 +160,7 @@ class Agent {
     async intentionLoop ( ) {
         while ( true ) {
             const intention = this.intention_queue.shift();  // remove first intention from queue
+            //console.log(this.intention_queue);
             if (intention){
 				// Try to achieve the intention
 				await intention.achieve();
@@ -347,6 +363,35 @@ class BlindMove extends Plan {
     }
 }
 
+class RandomMove extends Plan{
+    isApplicableTo ( desire ) {
+		return desire == 'go_to';
+    }
+
+    async execute (){
+        if(tile.get(me.x + 1).get(me.y) != undefined && tileIsFree(me.x + 1, me.y)){
+            await client.move("right");
+            return true;
+        }
+        else if(tile.get(me.x - 1).get(me.y) != undefined && tileIsFree(me.x - 1, me.y)){
+            await client.move("left");
+            return true;
+        }
+        else if(tile.get(me.x).get(me.y + 1) != undefined && tileIsFree(me.x, me.y + 1)){
+            await client.move("up");
+            return true;
+        }
+        else if(tile.get(me.x).get(me.y - 1) != undefined && tileIsFree(me.x, me.y - 1)){
+            await client.move("down");
+            return true;
+        }
+        else {
+            throw 'stucked again';
+        }
+    }
+}
+
 plans.push(new Delivery() )
 plans.push( new GoPickUp() )
 plans.push( new BlindMove() )
+plans.push( new RandomMove() )

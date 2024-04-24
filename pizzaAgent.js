@@ -11,6 +11,25 @@ function distance( {x:x1, y:y1}, {x:x2, y:y2}) {
     return dx + dy;
 }
 
+function select_closest_tile (tiles){
+    let nearest_distance = Number.MAX_VALUE;
+    let closest_tile;
+
+    for (const tile of tiles){ 
+        const distance_tile = distance(me, tile);
+
+        if (distance_tile < nearest_distance){
+             nearest_distance = distance_tile;
+             closest_tile = tile;
+        }
+    }
+    return closest_tile;
+}
+
+function select_closest_parcel (parcel){
+    
+}
+
 
 /**
 * Sensing
@@ -36,13 +55,17 @@ client.onParcelsSensing( async ( perceived_parcels ) => {
 /**
  * @type {Map<x,Map<y,{x,y,delivery}>}
  */
-const map = new Map()
+const tile = new Map();
+const deliveryTile = new Set();
 
 client.onTile( ( x, y, delivery ) => {
-    if (! map.has(x)){
-		map.set(x, new Map);
+    if (! tile.has(x)){
+		tile.set(x, new Map);
 	}      
-    map.get(x).set(y, {x, y, delivery});
+    tile.get(x).set(y, {x, y, delivery});
+    if (delivery){
+        deliveryTile.add({x, y});
+    }
 } );
 
 
@@ -60,6 +83,12 @@ function agentLoop() {
 
 	for (const [_, parcel] of parcels.entries()){
 		if (parcel.carriedBy){
+            if (parcel.carriedBy == me.id && deliveryTile.size > 0){
+                options.push({
+                    desire: 'deliver',
+                    args: [select_closest_tile(deliveryTile)]
+                })
+            }
 			continue;  // if someone else is already holding the parcel, skip it
 		}
 		options.push({  // Generate new desire to pick up the parcel
@@ -67,7 +96,6 @@ function agentLoop() {
 			args: [parcel]
 		});
 	}
-
     
     /**
      * Select best intention
@@ -76,18 +104,24 @@ function agentLoop() {
 	let nearest_distance = Number.MAX_VALUE;
 
 	for (const option of options){
-		if (option.desire != 'go_pick_up'){
-			continue;
-		} 
+		if (option.desire == 'go_pick_up'){
+			let parcel = option.args[0];
+		    const distance_to_option = distance(me, parcel);
 
-		let parcel = option.args[0];
-		const distance_to_option = distance(me, parcel);
-
-		if (distance_to_option < nearest_distance){
+		    if (distance_to_option < nearest_distance){
 			// choose closest parcel as best option
-			best_option = option;
-			nearest_distance = distance_to_option;
+			    best_option = option;
+			    nearest_distance = distance_to_option;
 		}
+		} 
+        else if (option.desire == 'deliver'){
+            const distance_to_option = distance (me, option.args[0]);
+            if (distance_to_option < nearest_distance){
+                best_option = option;
+                nearest_distance = distance_to_option;
+            }
+        }
+		
 	}
 
 
@@ -234,7 +268,11 @@ class Delivery extends Plan{
 
     async execute (...args){
         let array_args = args.shift().shift();
-        console.log(array_args);
+        let x = array_args['x'];
+		let y = array_args['y'];
+        await this.subIntention('go_to', x, y);
+        await client.putdown();
+        return true;
     }
 }
 
@@ -260,7 +298,7 @@ class BlindMove extends Plan {
     }
 
     async execute ( x, y ) {
-		console.log("Position of parcel:" , x, y)
+		//console.log("Position of parcel:" , x, y)
 		while ( me.x != x || me.y != y ) {
             let status_x = false;
             let status_y = false;
@@ -309,5 +347,6 @@ class BlindMove extends Plan {
     }
 }
 
+plans.push(new Delivery() )
 plans.push( new GoPickUp() )
 plans.push( new BlindMove() )

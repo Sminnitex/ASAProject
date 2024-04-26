@@ -115,8 +115,7 @@ function agentLoop() {
      */
 	let best_option;
 	let nearest_distance = Number.MAX_VALUE;
-    console.log("-----------------------")
-    console.log(options)
+
 	for (const option of options){
 		if (option.desire == 'go_pick_up'){
 			let parcel = option.args[0];
@@ -144,7 +143,6 @@ function agentLoop() {
      */
 	if (best_option){
 		myAgent.queue(best_option.desire, best_option.args);  // simply queue it - no logic yet!
-        console.log(best_option);
 	}
 }
 client.onParcelsSensing(agentLoop);  // execute agent loop when sensing parcels TODO: is this the best time?
@@ -160,7 +158,7 @@ class Agent {
     async intentionLoop ( ) {
         while ( true ) {
             const intention = this.intention_queue.shift();  // remove first intention from queue
-            //console.log(this.intention_queue);
+        
             if (intention){
 				// Try to achieve the intention
 				await intention.achieve();
@@ -287,7 +285,17 @@ class Delivery extends Plan{
         let x = array_args['x'];
 		let y = array_args['y'];
         await this.subIntention('go_to', x, y);
-        await client.putdown();
+        let putdown_result = await client.putdown();
+
+        if(putdown_result){
+            // remove all parcels that were put down from parcel map (otherwise, it will get stuck on delivery tile)
+            for (const [p_id, parcel] of parcels.entries()){
+                if (parcel.carriedBy == me.id){
+                    parcels.delete(p_id)
+                }
+            }
+        }
+
         return true;
     }
 }
@@ -307,19 +315,15 @@ class GoPickUp extends Plan{
     }
 }
 
-// Example Plan: Move blindly towards packet
 class BlindMove extends Plan {
     isApplicableTo ( desire ) {
 		return desire == 'go_to';
     }
 
     async execute ( x, y ) {
-		//console.log("Position of parcel:" , x, y)
 		while ( me.x != x || me.y != y ) {
             let status_x = false;
             let status_y = false;
-            
-            // console.log('me', me, 'xy', x, y);
 
             if ( x > me.x ){
 				status_x = await client.move('right');
@@ -346,12 +350,10 @@ class BlindMove extends Plan {
                 me.x = status_y.x;
                 me.y = status_y.y;
             }
-
-			console.log(status_x, status_y)
             
             if ( ! status_x && ! status_y) {
-                console.log('stucked');
-                throw 'stucked';
+                console.log('stuck');
+                throw 'stuck';
             } else if ( me.x == x && me.y == y ) {
                 console.log('target reached');
             }
@@ -386,7 +388,7 @@ class RandomMove extends Plan{
             return true;
         }
         else {
-            throw 'stucked again';
+            throw 'stuck again';
         }
     }
 }

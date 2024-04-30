@@ -27,7 +27,7 @@ function select_closest_tile (tiles){
 }
 
 function tileIsFree(x, y){
-    for (const a of agents.entries){
+    for (const a of agents.entries()){
         if (x == a['x'] && y == a['y']){
             return false;
         }
@@ -47,6 +47,7 @@ client.onYou( ( {id, name, x, y, score} ) => {
     me.x = x;
     me.y = y;
     me.score = score;
+
 } )
 
 const parcels = new Map();
@@ -93,15 +94,27 @@ function agentLoop() {
 
 	const options = [];
 
-	for (const [_, parcel] of parcels.entries()){
-		if (parcel.carriedBy){
-            if (parcel.carriedBy == me.id && deliveryTile.size > 0){
-                options.push({
-                    desire: 'deliver',
-                    args: [select_closest_tile(deliveryTile)]
-                })
+	for (const [p_id, parcel] of parcels.entries()){
+        if (parcel.reward <= 1){
+            console.log('Deleting parcel', parcel, 'because the timer ran out.');
+            parcels.delete(p_id);
+            continue;
+        }
+		else if (parcel.carriedBy){
+            if (parcel.carriedBy == me.id){
+                if (deliveryTile.size > 0){
+                    options.push({
+                        desire: 'deliver',
+                        args: [select_closest_tile(deliveryTile)]
+                    })
+                }
+                continue;
             }
-			continue;  // if someone else is already holding the parcel, skip it
+            else {
+                console.log('Deleting parcel', parcel, 'because someone took it.');
+                parcels.delete(p_id)
+                continue;
+            }
 		}
         
 		options.push({  // Generate new desire to pick up the parcel
@@ -128,7 +141,7 @@ function agentLoop() {
 		}
 		} 
         else if (option.desire == 'deliver'){
-            const distance_to_option = distance (me, option.args[0]);
+            const distance_to_option = distance(me, option.args[0]);
             if (distance_to_option < nearest_distance){
                 best_option = option;
                 nearest_distance = distance_to_option;
@@ -161,7 +174,8 @@ class Agent {
         
             if (intention){
 				// Try to achieve the intention
-				await intention.achieve();
+				let result = await intention.achieve();
+
 			}
             await new Promise( res => setImmediate(res) );
         }
@@ -238,14 +252,23 @@ class Intention extends Promise {
 				console.log('Achieving desire ', this.#desire, ...this.#args, ' with plan ', plan);
 				try {
 					const plan_res = await plan.execute(...this.#args);
-					console.log('Plan ',plan, ' successfully achieved with result ', plan_res);
-					this.#resolve(plan_res);
+                    if (plan_res){
+                        console.log('Plan ',plan, ' successfully achieved with result ', plan_res);
+					    this.#resolve(plan_res);
+                        return true;
+                    }
+                    else {
+                        console.log('Plan ', plan, ' failed');
+                        continue;
+                    }
+					
 				} catch (error){
 					console.log('Plan ', plan, ' failed');
-					this.#reject(error)
+                    continue;
 				}
 			}
 		}
+        return false;
 
     }
 
@@ -284,7 +307,12 @@ class Delivery extends Plan{
         let array_args = args.shift().shift();
         let x = array_args['x'];
 		let y = array_args['y'];
-        await this.subIntention('go_to', x, y);
+    
+        let res = await this.subIntention('go_to', x, y);
+        if (!res){
+            return false;
+        }
+
         let putdown_result = await client.putdown();
 
         if(putdown_result){
@@ -309,8 +337,17 @@ class GoPickUp extends Plan{
         let array_args = args.shift().shift();
 		let x = array_args['x'];
 		let y = array_args['y'];
-        await this.subIntention('go_to', x, y);
+
+        let res = await this.subIntention('go_to', x, y);
+        if (!res){
+            return false;
+        }
+
         await client.pickup();
+
+        let parcel_id = array_args['id'];
+        console.log(parcels.get(parcel_id).carriedBy);
+
         return true;
     }
 }
@@ -334,7 +371,7 @@ class BlindMove extends Plan {
                 
 
             if (status_x) {
-                me.x = status_x.x;
+                me.x = status_x.xstatus_y;
                 me.y = status_x.y;
             }
 
@@ -353,9 +390,10 @@ class BlindMove extends Plan {
             
             if ( ! status_x && ! status_y) {
                 console.log('stuck');
-                throw 'stuck';
+                return false;
             } else if ( me.x == x && me.y == y ) {
                 console.log('target reached');
+                return true;
             }
             
         }
@@ -371,24 +409,33 @@ class RandomMove extends Plan{
     }
 
     async execute (){
-        if(tile.get(me.x + 1).get(me.y) != undefined && tileIsFree(me.x + 1, me.y)){
-            await client.move("right");
-            return true;
+        try{
+            
+            if(tile.get(me.x + 1) != undefined && tile.get(me.x + 1).get(me.y) != undefined && tileIsFree(me.x + 1, me.y)){
+                await client.move("right");
+                return true;
+            }
+            else if(tile.get(me.x - 1) != undefined && tile.get(me.x - 1).get(me.y) != undefined && tileIsFree(me.x - 1, me.y)){
+                await client.move("left");
+                return true;
+            }
+            else if(tile.get(me.x) != undefined && tile.get(me.x).get(me.y + 1) != undefined && tileIsFree(me.x, me.y + 1)){
+                await client.move("up");
+                return true;
+            }
+            else if(tile.get(me.x) != undefined && tile.get(me.x).get(me.y - 1) != undefined && tileIsFree(me.x, me.y - 1)){
+                await client.move("down");
+                return true;
+            }
+            else {
+                console.log('Stuck again')
+                return false;
+                //throw 'stuck again';
+            }
         }
-        else if(tile.get(me.x - 1).get(me.y) != undefined && tileIsFree(me.x - 1, me.y)){
-            await client.move("left");
-            return true;
-        }
-        else if(tile.get(me.x).get(me.y + 1) != undefined && tileIsFree(me.x, me.y + 1)){
-            await client.move("up");
-            return true;
-        }
-        else if(tile.get(me.x).get(me.y - 1) != undefined && tileIsFree(me.x, me.y - 1)){
-            await client.move("down");
-            return true;
-        }
-        else {
-            throw 'stuck again';
+        catch (error){
+            console.log('Error', error);
+            return false;
         }
     }
 }
@@ -396,4 +443,4 @@ class RandomMove extends Plan{
 plans.push(new Delivery() )
 plans.push( new GoPickUp() )
 plans.push( new BlindMove() )
-plans.push( new RandomMove() )
+//plans.push( new RandomMove() )

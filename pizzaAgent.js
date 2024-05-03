@@ -189,8 +189,6 @@ function agentLoop() {
      * Revise/queue intention 
      */
 	if (best_option){
-        console.log("DEBUG MOMENTOOOO")
-        console.log(best_option)
 		myAgent.queue(best_option.desire, best_option.args);  // simply queue it - no logic yet!
 	}else{
         explore = true;

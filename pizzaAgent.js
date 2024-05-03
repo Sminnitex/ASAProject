@@ -47,7 +47,7 @@ function select_random_tile_from_map(map) {
 }
 
 function tileIsFree(x, y){
-    for (const a of agents.entries()){
+    for (const [_, a] of agents.entries()){
         if (x == a['x'] && y == a['y']){
             return false;
         }
@@ -402,16 +402,17 @@ class BlindMove extends Plan {
     async execute ( x, y ) {
         explore = false;
     while ( me.x != x || me.y != y ) {
+        tileIsFree(x, y)
             let status_x = false;
             let status_y = false;
 
             if ( x > me.x ){
-                if(tile.get(me.x + 1) != undefined){
+                if(tile.get(me.x + 1) != undefined && tileIsFree(x, y)){
                     status_x = await client.move('right');
                 }
       }
             else if ( x < me.x ){
-                if(tile.get(me.x - 1) != undefined){
+                if(tile.get(me.x - 1) != undefined && tileIsFree(x, y)){
                     status_x = await client.move('left');
                 }
       }
@@ -423,12 +424,12 @@ class BlindMove extends Plan {
             }
 
             if ( y > me.y ){
-                if(tile.get(me.x).get(me.y + 1) != undefined){
+                if(tile.get(me.x).get(me.y + 1) != undefined && tileIsFree(x, y)){
                     status_y = await client.move('up');
                 }
       }
             else if ( y < me.y ){
-                if(tile.get(me.x).get(me.y - 1) != undefined){
+                if(tile.get(me.x).get(me.y - 1) != undefined && tileIsFree(x, y)){
                     status_y = await client.move('down');
                 }
       }
@@ -513,13 +514,13 @@ class RandomMove extends Plan {
         const dx = x - me.x;
         const dy = y - me.y;
 
-        if (dx > 0 && tile.get(me.x + 1) !== undefined) {
+        if (dx > 0 && tile.get(me.x + 1) !== undefined && tileIsFree(x, y)) {
             await client.move('right');
-        } else if (dx < 0 && tile.get(me.x - 1) !== undefined) {
+        } else if (dx < 0 && tile.get(me.x - 1) !== undefined && tileIsFree(x, y)) {
             await client.move('left');
-        } else if (dy > 0 && tile.get(me.x).get(me.y + 1) !== undefined) {
+        } else if (dy > 0 && tile.get(me.x).get(me.y + 1) !== undefined && tileIsFree(x, y)) {
             await client.move('up');
-        } else if (dy < 0 && tile.get(me.x).get(me.y - 1) !== undefined) {
+        } else if (dy < 0 && tile.get(me.x).get(me.y - 1) !== undefined && tileIsFree(x, y)) {
             await client.move('down');
         }
 
@@ -530,16 +531,16 @@ class RandomMove extends Plan {
     getNeighbors(x, y) {
         const neighbors = [];
 
-        if (tile.get(x - 1).get(y) !== undefined) {
+        if (tile.get(x - 1).get(y) !== undefined && tileIsFree(x, y)) {
             neighbors.push({ x: x - 1, y });
         }
-        if (tile.get(x + 1).get(y) !== undefined) {
+        if (tile.get(x + 1).get(y) !== undefined && tileIsFree(x, y)) {
             neighbors.push({ x: x + 1, y });
         }
-        if (tile.get(x).get(y - 1) !== undefined) {
+        if (tile.get(x).get(y - 1) !== undefined && tileIsFree(x, y)) {
             neighbors.push({ x, y: y - 1 });
         }
-        if (tile.get(x).get(y + 1) !== undefined) {
+        if (tile.get(x).get(y + 1) !== undefined && tileIsFree(x, y)) {
             neighbors.push({ x, y: y + 1 });
         }
 

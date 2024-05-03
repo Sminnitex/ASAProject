@@ -143,14 +143,13 @@ function agentLoop() {
 			desire: 'go_pick_up',
 			args: [parcel]
 		});
-
-        if (explore){
-            options.push({
-                desire: "move",
-                args: [select_random_tile_from_map(tile)]
-            });
-        }
 	}
+    if (explore){
+        options.push({
+            desire: "move",
+            args: [select_random_tile_from_map(tile)]
+        });
+    }
     
     /**
      * Select best intention

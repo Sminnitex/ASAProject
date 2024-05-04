@@ -61,6 +61,18 @@ function tileIsFree(x, y){
 * Sensing
 **/
 
+var AGENTS_OBSERVATION_DISTANCE
+var MOVEMENT_DURATION
+var PARCEL_DECADING_INTERVAL
+var PARCEL_REWARD_AVG
+client.onConfig( (config) => {
+    AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
+    MOVEMENT_DURATION = config.MOVEMENT_DURATION;
+    PARCEL_DECADING_INTERVAL = config.PARCEL_DECADING_INTERVAL == '1s' ? 1000 : 1000000;
+    PARCEL_REWARD_AVG = config.PARCEL_REWARD_AVG;
+
+} );
+
 const me = {};
 client.onYou( ( {id, name, x, y, score} ) => {
         me.id = id;
@@ -71,10 +83,19 @@ client.onYou( ( {id, name, x, y, score} ) => {
 } )
 
 const parcels = new Map();
+const parcel_timers = new Map();
 client.onParcelsSensing( async ( perceived_parcels ) => {
     for (const p of perceived_parcels) {
 		// p is {id, x, y, carriedBy, reward}
         parcels.set(p.id, p);
+        parcel_timers.set(p.id, Date.now());
+    }
+    for (const [p_id, time] of parcel_timers.entries()){
+        if (Date.now() - time >= PARCEL_REWARD_AVG * PARCEL_DECADING_INTERVAL){
+            console.log('[Parcels] Removing parcel ', p_id, '.')
+            parcels.delete(p_id);
+            parcel_timers.delete(p_id);
+        }
     }
 } )
 
@@ -120,6 +141,7 @@ function agentLoop() {
         if (parcel.reward <= 1){
             console.log('[BDILoop] Deleting parcel', parcel, 'because the timer ran out.');
             parcels.delete(p_id);
+            parcel_timers.delete(p_id);
             continue;
         }
 		else if (parcel.carriedBy){
@@ -134,7 +156,8 @@ function agentLoop() {
             }
             else {
                 console.log('[BDILoop] Deleting parcel', parcel, 'because someone took it.');
-                parcels.delete(p_id)
+                parcels.delete(p_id);
+                parcel_timers.delete(p_id);
                 continue;
             }
 		}
@@ -150,7 +173,6 @@ function agentLoop() {
             desire: "move",
             args: [select_random_tile_from_map(tile)]
         });
-        explore = false; // push only once until triggered again
     }
     
     /**
@@ -178,16 +200,17 @@ function agentLoop() {
             }
         }
         else if (option.desire == "move"){
-            /*const distance_to_option = distance(me, option.args[0]);
-             if (distance_to_option < nearest_distance){
-                 best_option = option;
-                 nearest_distance = distance_to_option;
-             } 
-            */
+            const distance_to_option = distance(me, option.args[0]);
+            if (distance_to_option < nearest_distance){
+                best_option = option;
+                nearest_distance = distance_to_option;
+            } 
+           /*
            // execute move immediately because we are either stuck or have nocthing else to do
-           //best_option = option;
-           //nearest_distance = distance(me, option.args[0]);
-           //break;
+           best_option = option;
+           nearest_distance = distance(me, option.args[0]);
+           break;
+           */
         }
 		
 	}
@@ -203,7 +226,7 @@ function agentLoop() {
         explore = true;
     }
 }
-client.onParcelsSensing(agentLoop);  // execute agent loop when sensing parcels TODO: is this the best time?
+client.onParcelsSensing(agentLoop);  // execute agent loop when sensing parcels
 
 
 /**
@@ -226,12 +249,12 @@ class Agent {
                 if (intention.get_desire() == 'go_pick_up'){
                     // check if someone (including me) already has the parcel
                     const args = intention.get_args()[0][0];
-                    if (parcels.get(args.id).carriedBy != null){
+                    if (parcels.get(args.id) == undefined || parcels.get(args.id).carriedBy != null){
                         console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue; 
                     }
                 }
-                if (intention.get_desire() == 'deliver'){
+                else if (intention.get_desire() == 'deliver'){
                     // check if I am holding a parcel
                     let carrying_parcels = false;
                     for (const [_, parcel] of parcels.entries()){
@@ -243,7 +266,14 @@ class Agent {
                         const args = intention.get_args()[0][0];
                         console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue;
-                    }  
+                    } 
+                }
+                else if(intention.get_desire() == 'move'){
+                    if (!explore){
+                        const args = intention.get_args()[0][0];
+                        console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
+                        continue;
+                    }
                 }
 
 				// Try to achieve the intention
@@ -304,7 +334,7 @@ class Intention extends Promise {
     }
 
     get_args(){
-        return this.#args;   // return copy
+        return this.#args;
     }
 
 	// Functions
@@ -335,7 +365,6 @@ class Intention extends Promise {
 					const plan_res = await plan.execute(...this.#args);
                     if (plan_res){
                         console.log('[I] Plan ', plan, ' successfully achieved with result ', plan_res, '.');
-					    //this.#resolve(plan_res);
                         return true;
                     }
                     else {
@@ -400,7 +429,8 @@ class Delivery extends Plan{
             // remove all parcels that were put down from parcel map (otherwise, it will get stuck on delivery tile)
             for (const [p_id, parcel] of parcels.entries()){
                 if (parcel.carriedBy == me.id){
-                    parcels.delete(p_id)
+                    parcels.delete(p_id);
+                    parcel_timers.delete(p_id);
                 }
             }
         }
@@ -496,6 +526,7 @@ class RandomMove extends Plan {
     }
 
     async execute(...args) {
+        explore = false;
         let array_args = args.shift().shift();
 		let x = array_args['x'];
 		let y = array_args['y'];
@@ -591,4 +622,4 @@ class RandomMove extends Plan {
 plans.push(new Delivery() )
 plans.push( new GoPickUp() )
 plans.push( new BlindMove() )
-//plans.push( new RandomMove() )
+plans.push( new RandomMove() )

@@ -188,7 +188,7 @@ function agentLoop() {
      * Revise/queue intention 
      */
 	if (best_option){
-		myAgent.queue(best_option.desire, best_option.args);  // simply queue it - no logic yet!
+        myAgent.queue(best_option.desire, best_option.args);  // simply queue it - no logic yet!
 	}else{
         explore = true;
     }
@@ -401,7 +401,6 @@ class BlindMove extends Plan {
     async execute ( x, y ) {
         explore = false;
     while ( me.x != x || me.y != y ) {
-        tileIsFree(x, y)
             let status_x = false;
             let status_y = false;
 
@@ -465,86 +464,59 @@ class RandomMove extends Plan {
 		let x = array_args['x'];
 		let y = array_args['y'];
 
-        const start = { x: me.x, y: me.y };
-        const target = { x, y };
-
-        const path = await this.findPath(start, target);
-
-        for (const { x: nextX, y: nextY } of path) {
-            await this.moveTowards(nextX, nextY);
-        }
-
-        console.log('target reached');
-        explore = false;
-        return true;
-    }
-
-    async findPath(start, target) {
-        const queue = [{ position: start, path: [] }];
-        const visited = new Set();
-
-        while (queue.length > 0) {
-            const { position, path } = queue.shift();
-            const { x, y } = position;
-
-            if (x === target.x && y === target.y) {
-                return path;
-            }
-
-            const neighbors = this.getNeighbors(x, y);
-            
-            for (const neighbor of neighbors) {
-                const { x: nx, y: ny } = neighbor;
-                const key = `${nx},${ny}`;
-
-                if (!visited.has(key)) {
-                    visited.add(key);
-                    queue.push({ position: neighbor, path: [...path, neighbor] });
+        while ( me.x != x || me.y != y ) {
+                let status_x = false;
+                let status_y = false;
+    
+                if ( x > me.x ){
+                    if(tile.get(me.x + 1) != undefined && tileIsFree(x, y)){
+                        status_x = await client.move('right');
+                    }
+          }
+                else if ( x < me.x ){
+                    if(tile.get(me.x - 1) != undefined && tileIsFree(x, y)){
+                        status_x = await client.move('left');
+                    }
+          }
+                    
+    
+                if (status_x) {
+                    me.x = status_x.x;
+                    me.y = status_x.y;
                 }
+    
+                if ( y > me.y ){
+                    if(tile.get(me.x).get(me.y + 1) != undefined && tileIsFree(x, y)){
+                        status_y = await client.move('up');
+                    }
+          }
+                else if ( y < me.y ){
+                    if(tile.get(me.x).get(me.y - 1) != undefined && tileIsFree(x, y)){
+                        status_y = await client.move('down');
+                    }
+          }
+                    
+    
+                if (status_y) {
+                    me.x = status_y.x;
+                    me.y = status_y.y;
+                }
+                
+                if ( ! status_x && ! status_y) {
+                    console.log('stuck');
+                    //explore = true; //can't find path, explore
+                    break; //bad code but let's try
+                    //throw 'stuck';
+                } else if ( me.x == x && me.y == y ) {
+                    console.log('target reached');
+                    explore = false;
+                }
+                
             }
+    
+            return true;
+    
         }
-
-        // No path found
-        console.log('No path found');
-        return [];
-    }
-
-    async moveTowards(x, y) {
-        const dx = x - me.x;
-        const dy = y - me.y;
-
-        if (dx > 0 && tile.get(me.x + 1) !== undefined && tileIsFree(x, y)) {
-            await client.move('right');
-        } else if (dx < 0 && tile.get(me.x - 1) !== undefined && tileIsFree(x, y)) {
-            await client.move('left');
-        } else if (dy > 0 && tile.get(me.x).get(me.y + 1) !== undefined && tileIsFree(x, y)) {
-            await client.move('up');
-        } else if (dy < 0 && tile.get(me.x).get(me.y - 1) !== undefined && tileIsFree(x, y)) {
-            await client.move('down');
-        }
-
-        me.x = x;
-        me.y = y;
-    }
-
-    getNeighbors(x, y) {
-        const neighbors = [];
-
-        if (tile.get(x - 1).get(y) !== undefined && tileIsFree(x, y)) {
-            neighbors.push({ x: x - 1, y });
-        }
-        if (tile.get(x + 1).get(y) !== undefined && tileIsFree(x, y)) {
-            neighbors.push({ x: x + 1, y });
-        }
-        if (tile.get(x).get(y - 1) !== undefined && tileIsFree(x, y)) {
-            neighbors.push({ x, y: y - 1 });
-        }
-        if (tile.get(x).get(y + 1) !== undefined && tileIsFree(x, y)) {
-            neighbors.push({ x, y: y + 1 });
-        }
-
-        return neighbors;
-    }
 }
 
 

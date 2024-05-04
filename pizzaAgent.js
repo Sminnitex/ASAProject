@@ -132,6 +132,7 @@ function agentLoop() {
 	for (const option of options){
 		if (option.desire == 'go_pick_up'){
 			let parcel = option.args[0];
+            console.log(me, parcel);
 		    const distance_to_option = distance(me, parcel);
 
 		    if (distance_to_option < nearest_distance){
@@ -141,6 +142,7 @@ function agentLoop() {
 		}
 		} 
         else if (option.desire == 'deliver'){
+            console.log(me, option.args[0]);
             const distance_to_option = distance(me, option.args[0]);
             if (distance_to_option < nearest_distance){
                 best_option = option;
@@ -157,6 +159,9 @@ function agentLoop() {
 	if (best_option){
 		myAgent.queue(best_option.desire, best_option.args);  // simply queue it - no logic yet!
 	}
+    else {
+        myAgent.queue('move');
+    }
 }
 client.onParcelsSensing(agentLoop);  // execute agent loop when sensing parcels TODO: is this the best time?
 
@@ -174,8 +179,7 @@ class Agent {
         
             if (intention){
 				// Try to achieve the intention
-				let result = await intention.achieve();
-
+				await intention.achieve();
 			}
             await new Promise( res => setImmediate(res) );
         }
@@ -254,7 +258,7 @@ class Intention extends Promise {
 					const plan_res = await plan.execute(...this.#args);
                     if (plan_res){
                         console.log('Plan ',plan, ' successfully achieved with result ', plan_res);
-					    this.#resolve(plan_res);
+					    //this.#resolve(plan_res);
                         return true;
                     }
                     else {
@@ -345,9 +349,6 @@ class GoPickUp extends Plan{
 
         await client.pickup();
 
-        let parcel_id = array_args['id'];
-        console.log(parcels.get(parcel_id).carriedBy);
-
         return true;
     }
 }
@@ -405,12 +406,11 @@ class BlindMove extends Plan {
 
 class RandomMove extends Plan{
     isApplicableTo ( desire ) {
-		return desire == 'go_to';
+		return desire == 'move';
     }
 
     async execute (){
         try{
-            
             if(tile.get(me.x + 1) != undefined && tile.get(me.x + 1).get(me.y) != undefined && tileIsFree(me.x + 1, me.y)){
                 await client.move("right");
                 return true;

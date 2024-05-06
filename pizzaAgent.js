@@ -26,7 +26,22 @@ function select_closest_tile (tiles){
     return closest_tile;
 }
 
-function select_random_tile(tiles) {
+function select_random_tile(tiles, weights) {
+    // Calculate the total sum of the weights and generate a random value between 0 and total weight
+    const totalWeight = weights.reduce((acc, weight) => acc + weight, 0);
+    const randomWeight = Math.random() * totalWeight;
+
+    // Sum each weight, if random weight <= of sum weight return the corresponding tile
+    let cumulativeWeight = 0;
+    for (let i = 0; i < tiles.length; i++) {
+        cumulativeWeight += weights[i];
+        if (randomWeight <= cumulativeWeight) {
+            return tiles[i];
+        }
+    }
+
+
+    // In case of some error, return a random tile
     const randomIndex = Math.floor(Math.random() * tiles.length);
     return tiles[randomIndex];
 }
@@ -34,21 +49,30 @@ function select_random_tile(tiles) {
 
 function select_random_tile_from_map(map) {
     let allTiles = [];
+    let weights = [];
+    let center = (map.size / 2);
+    let map_center = {x: center, y: center}
 
     // Iterate over each entry in the map
     for (const [_, tiles] of map) {
         // Iterate over tiles in the current entry
         for (const [_, tile] of tiles) {
             allTiles.push(tile);
+
+            // Associate weights to have exploration more probable on tiles 
+            //closer to the center of the map
+            const distance_from_center = distance(tile, map_center);
+            const weight = 1 / (distance_from_center + 1);
+            weights.push(weight);
         }
     }
-
-    // Use the select_random_tile function to select a random tile
-    return select_random_tile(allTiles);
+    
+    // Use the select_random_tile function to select a random tile, with weights
+    return select_random_tile(allTiles, weights);
 }
 
 function tileIsFree(x, y){
-    for (const a of agents.entries()){
+    for (const [_, a] of agents.entries()){
         if (x == a['x'] && y == a['y']){
             return false;
         }
@@ -200,17 +224,17 @@ function agentLoop() {
             }
         }
         else if (option.desire == "move"){
-            const distance_to_option = distance(me, option.args[0]);
-            if (distance_to_option < nearest_distance){
-                best_option = option;
-                nearest_distance = distance_to_option;
-            } 
-           /*
+          //  const distance_to_option = distance(me, option.args[0]);
+           // if (distance_to_option < nearest_distance){
+             //   best_option = option;
+               // nearest_distance = distance_to_option;
+          //  } 
+           
            // execute move immediately because we are either stuck or have nocthing else to do
            best_option = option;
            nearest_distance = distance(me, option.args[0]);
            break;
-           */
+           
         }
 		
 	}
@@ -535,11 +559,17 @@ class RandomMove extends Plan {
         const target = { x, y };
 
         const path = await this.findPath(start, target);
-
+           
         if (path.length > 0){
 
-            // todo: more checks here
+            
             for (const { x: nextX, y: nextY } of path) {
+                if(myAgent.intention_queue[myAgent.intention_queue.length - 1]?.get_desire() !== 'move' && myAgent.intention_queue[myAgent.intention_queue.length - 1]?.get_desire() !== undefined){
+                    //i didn't find a method to continue the expression on the line below
+                    console.log("[RandomMove] Parcel found! Changing intention");
+                    this.stop(); //parcel found, change plan
+                    return true; 
+                }
                 await this.moveTowards(nextX, nextY);
             }
     

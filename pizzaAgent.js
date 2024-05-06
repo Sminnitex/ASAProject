@@ -224,17 +224,17 @@ function agentLoop() {
             }
         }
         else if (option.desire == "move"){
-            const distance_to_option = distance(me, option.args[0]);
-            if (distance_to_option < nearest_distance){
-                best_option = option;
-                nearest_distance = distance_to_option;
-            } 
-           /*
+          //  const distance_to_option = distance(me, option.args[0]);
+           // if (distance_to_option < nearest_distance){
+             //   best_option = option;
+               // nearest_distance = distance_to_option;
+          //  } 
+           
            // execute move immediately because we are either stuck or have nocthing else to do
            best_option = option;
            nearest_distance = distance(me, option.args[0]);
            break;
-           */
+           
         }
 		
 	}

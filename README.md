@@ -1,4 +1,8 @@
 # Install everything
+You'll need node js, you can download it at https://nodejs.org/en/
+
+Once everything is set up you need to go on terminal and run
+
 ```
 git clone https://github.com/unitn-ASA/Deliveroo.js.git
 cd Deliveroo.js
@@ -33,4 +37,5 @@ To modify the level you can modify both the .env or the level_1 files
 After you set the environment go on a terminal and run inside the ASAProject direcotry
 ```
 node pizzaAgent
+node strudelAgent
 ```

@@ -6,6 +6,8 @@ const client = new DeliverooApi(
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImU4NjkzZGY1ZTFkIiwibmFtZSI6Ik11bmljaE1hZmlhIiwiaWF0IjoxNzE1MTUzODUxfQ.N_BV1-iprJHuTK0U4vg68MzrifVhW6fuxe4TGzBDvx0'
 )
 
+//General purpose functions
+
 function distance( {x:x1, y:y1}, {x:x2, y:y2}) {
     const dx = Math.abs( Math.round(x1) - Math.round(x2) );
     const dy = Math.abs( Math.round(y1) - Math.round(y2) );
@@ -81,6 +83,72 @@ function tileIsFree(x, y){
     return true;
 }
 
+function getNeighbors(x, y) {
+    const neighbors = [];
+
+    if (tile.get(x - 1) != undefined && tile.get(x - 1).get(y) !== undefined && tileIsFree(x, y)) {
+        neighbors.push({ x: x - 1, y });
+    }
+    if (tile.get(x + 1) != undefined && tile.get(x + 1).get(y) !== undefined && tileIsFree(x, y)) {
+        neighbors.push({ x: x + 1, y });
+    }
+    if (tile.get(x) != undefined && tile.get(x).get(y - 1) !== undefined && tileIsFree(x, y)) {
+        neighbors.push({ x, y: y - 1 });
+    }
+    if (tile.get(x) != undefined && tile.get(x).get(y + 1) !== undefined && tileIsFree(x, y)) {
+        neighbors.push({ x, y: y + 1 });
+    }
+
+    return neighbors;
+}
+
+async function moveTowards(x, y) {
+    const dx = x - me.x;
+    const dy = y - me.y;
+
+    if (dx > 0 && tile.get(me.x + 1) != undefined && tileIsFree(x, y)) {
+        await client.move('right');
+    } else if (dx < 0 && tile.get(me.x - 1) != undefined && tileIsFree(x, y)) {
+        await client.move('left');
+    } else if (dy > 0 && tile.get(me.x) != undefined && tile.get(me.x).get(me.y + 1) != undefined && tileIsFree(x, y)) {
+        await client.move('up');
+    } else if (dy < 0 && tile.get(me.x) != undefined && tile.get(me.x).get(me.y - 1) != undefined && tileIsFree(x, y)) {
+        await client.move('down');
+    }
+
+    me.x = x;
+    me.y = y;
+}
+
+async function findPath(start, target) {
+    const queue = [{ position: start, path: [] }];
+    const visited = new Set();
+
+    while (queue.length > 0) {
+        const { position, path } = queue.shift();
+        const { x, y } = position;
+
+        if (x === target.x && y === target.y) {
+            return path;
+        }
+
+        const neighbors = getNeighbors(x, y);
+        
+        for (const neighbor of neighbors) {
+            const { x: nx, y: ny } = neighbor;
+            const key = `${nx},${ny}`;
+
+            if (!visited.has(key)) {
+                visited.add(key);
+                queue.push({ position: neighbor, path: [...path, neighbor] });
+            }
+        }
+    }
+
+    // No path found
+    console.log('[FindPath] No path found.');
+    return [];
+}
 
 /**
 * Sensing
@@ -501,46 +569,22 @@ class BlindMove extends Plan {
     }
 
     async execute ( x, y ) {
-		while ( me.x != x || me.y != y ) {
-            let status_x = false;
-            let status_y = false;
-
-            if ( x > me.x ){
-				status_x = await client.move('right');
-			}
-            else if ( x < me.x ){
-				status_x = await client.move('left');
-			}
-                
-            if (status_x) {
-                me.x = status_x.x;
-                me.y = status_x.y;
+        const start = { x: me.x, y: me.y };
+        const target = { x, y };
+        const path = await findPath(start, target);
+        
+		if (path.length > 0){
+            for (const { x: nextX, y: nextY } of path) {
+                await moveTowards(nextX, nextY);
             }
 
-            if ( y > me.y ){
-				status_y = await client.move('up');
-			}
-            else if ( y < me.y ){
-				status_y = await client.move('down');
-			}
-                
-            if (status_y) {
-                me.x = status_y.x;
-                me.y = status_y.y;
-            }
-            
-            if ( ! status_x && ! status_y) {
-                console.log('[BlindMove] Stuck.');
-                explore = true;
-                return false;
-            } else if ( me.x == x && me.y == y ) {
-                console.log('[BlindMove] Target reached.');
-                return true;
-            }
-            
+            console.log('[BlindMove] Target reached.');
+            return true;
+        }else {
+            explore = true;
+            console.log('[BlindMove] Stuck.');
+            return false;
         }
-
-        return true;
 
     }
 }
@@ -559,10 +603,9 @@ class RandomMove extends Plan {
         const start = { x: me.x, y: me.y };
         const target = { x, y };
 
-        const path = await this.findPath(start, target);
+        const path = await findPath(start, target);
            
         if (path.length > 0){
-
             
             for (const { x: nextX, y: nextY } of path) {
                 if(myAgent.intention_queue[myAgent.intention_queue.length - 1]?.get_desire() !== 'move' && myAgent.intention_queue[myAgent.intention_queue.length - 1]?.get_desire() !== undefined){
@@ -571,82 +614,14 @@ class RandomMove extends Plan {
                     this.stop(); //parcel found, change plan
                     return true; 
                 }
-                await this.moveTowards(nextX, nextY);
+                await moveTowards(nextX, nextY);
             }
     
             console.log('[RandomMove] Target reached.');
             return true;
-        }
-        else {
+        }else {
             return false;
         }
-    }
-
-    async findPath(start, target) {
-        const queue = [{ position: start, path: [] }];
-        const visited = new Set();
-
-        while (queue.length > 0) {
-            const { position, path } = queue.shift();
-            const { x, y } = position;
-
-            if (x === target.x && y === target.y) {
-                return path;
-            }
-
-            const neighbors = this.getNeighbors(x, y);
-            
-            for (const neighbor of neighbors) {
-                const { x: nx, y: ny } = neighbor;
-                const key = `${nx},${ny}`;
-
-                if (!visited.has(key)) {
-                    visited.add(key);
-                    queue.push({ position: neighbor, path: [...path, neighbor] });
-                }
-            }
-        }
-
-        // No path found
-        console.log('[RandomMove] No path found.');
-        return [];
-    }
-
-    async moveTowards(x, y) {
-        const dx = x - me.x;
-        const dy = y - me.y;
-
-        if (dx > 0 && tile.get(me.x + 1) != undefined && tileIsFree(x, y)) {
-            await client.move('right');
-        } else if (dx < 0 && tile.get(me.x - 1) != undefined && tileIsFree(x, y)) {
-            await client.move('left');
-        } else if (dy > 0 && tile.get(me.x) != undefined && tile.get(me.x).get(me.y + 1) != undefined && tileIsFree(x, y)) {
-            await client.move('up');
-        } else if (dy < 0 && tile.get(me.x) != undefined && tile.get(me.x).get(me.y - 1) != undefined && tileIsFree(x, y)) {
-            await client.move('down');
-        }
-
-        me.x = x;
-        me.y = y;
-    }
-
-    getNeighbors(x, y) {
-        const neighbors = [];
-
-        if (tile.get(x - 1) != undefined && tile.get(x - 1).get(y) !== undefined && tileIsFree(x, y)) {
-            neighbors.push({ x: x - 1, y });
-        }
-        if (tile.get(x + 1) != undefined && tile.get(x + 1).get(y) !== undefined && tileIsFree(x, y)) {
-            neighbors.push({ x: x + 1, y });
-        }
-        if (tile.get(x) != undefined && tile.get(x).get(y - 1) !== undefined && tileIsFree(x, y)) {
-            neighbors.push({ x, y: y - 1 });
-        }
-        if (tile.get(x) != undefined && tile.get(x).get(y + 1) !== undefined && tileIsFree(x, y)) {
-            neighbors.push({ x, y: y + 1 });
-        }
-
-        return neighbors;
     }
 }
 

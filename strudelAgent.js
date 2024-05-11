@@ -3,7 +3,7 @@ import { PddlDomain, PddlAction, PddlProblem, PddlExecutor, onlineSolver, Belief
 
 const client = new DeliverooApi(
     'http://localhost:8080/',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImU4NjkzZGY1ZTFkIiwibmFtZSI6Ik11bmljaE1hZmlhIiwiaWF0IjoxNzE1MTUzODUxfQ.N_BV1-iprJHuTK0U4vg68MzrifVhW6fuxe4TGzBDvx0'
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjQ5YzE4ODlkZjJlIiwibmFtZSI6IlN0cnVkZWxBZ2VudCIsImlhdCI6MTcxNTQyNzg1Mn0.Mwelz_T7i3tL9XwGX2hbdcmoLgs9zuHo8M_pYlQNKuI'
 )
 
 function distance( {x:x1, y:y1}, {x:x2, y:y2}) {

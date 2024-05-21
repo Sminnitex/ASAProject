@@ -39,3 +39,23 @@ After you set the environment go on a terminal and run inside the ASAProject dir
 node pizzaAgent
 node strudelAgent
 ```
+
+# Run in local with pddl planner
+
+To install the planner we used
+```
+sudo apt update
+sudo apt install cmake g++ make python3
+git clone https://github.com/aibasel/downward/
+cd downward
+./build.py
+```
+
+To test the planner
+```
+./fast-downward.py misc/tests/benchmarks/miconic/s1-0.pddl --search "astar(lmcut())"
+./fast-downward.py misc/tests/benchmarks/miconic/s1-0.pddl --search "astar(operatorcounting([lmcut_constraints()]))"
+```
+
+
+

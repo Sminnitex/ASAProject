@@ -1,21 +1,23 @@
 ;; domain file: domain-deliveroo.pddl
-(define (domain default)
-    (:requirements :strips)
+(define (domain deliveroo)
+    (:requirements :strips :typing)
+    (:types
+        tile
+        agent
+        parcel
+    )
     (:predicates
-        (tile ?t)
-        (delivery ?t)
-        (agent ?a)
-        (parcel ?p)
-        (me ?a)
-        (at ?agentOrParcel ?tile)
-        (right ?t1 ?t2)
-        (left ?t1 ?t2)
-        (up ?t1 ?t2)
-        (down ?t1 ?t2)
+        (delivery ?t - tile)
+        (me ?a - agent)
+        (at ?agentOrParcel - (either agent parcel) ?t - tile)
+        (right ?t1 ?t2 - tile)
+        (left ?t1 ?t2 - tile)
+        (up ?t1 ?t2 - tile)
+        (down ?t1 ?t2 - tile)
     )
     
     (:action right
-        :parameters (?me ?from ?to)
+        :parameters (?me - agent ?from ?to - tile)
         :precondition (and
             (me ?me)
             (at ?me ?from)
@@ -23,13 +25,12 @@
         )
         :effect (and
             (at ?me ?to)
-			(not (at ?me ?from))
+            (not (at ?me ?from))
         )
     )
 
-
-        (:action left
-        :parameters (?me ?from ?to)
+    (:action left
+        :parameters (?me - agent ?from ?to - tile)
         :precondition (and
             (me ?me)
             (at ?me ?from)
@@ -42,7 +43,7 @@
     )
 
     (:action up
-        :parameters (?me ?from ?to)
+        :parameters (?me - agent ?from ?to - tile)
         :precondition (and
             (me ?me)
             (at ?me ?from)
@@ -55,7 +56,7 @@
     )
 
     (:action down
-        :parameters (?me ?from ?to)
+        :parameters (?me - agent ?from ?to - tile)
         :precondition (and
             (me ?me)
             (at ?me ?from)

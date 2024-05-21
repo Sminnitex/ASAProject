@@ -185,7 +185,6 @@ client.onParcelsSensing( async ( perceived_parcels ) => {
     }
     for (const [p_id, time] of parcel_timers.entries()){
         if (Date.now() - time >= PARCEL_REWARD_AVG * PARCEL_DECADING_INTERVAL){
-            console.log('[Parcels] Removing parcel ', p_id, '.')
             parcels.delete(p_id);
             parcel_timers.delete(p_id);
         }
@@ -232,7 +231,6 @@ function agentLoop() {
 
 	for (const [p_id, parcel] of parcels.entries()){
         if (parcel.reward <= 1){
-            console.log('[BDILoop] Deleting parcel', parcel, 'because the timer ran out.');
             parcels.delete(p_id);
             parcel_timers.delete(p_id);
             continue;
@@ -248,7 +246,6 @@ function agentLoop() {
                 continue;
             }
             else {
-                console.log('[BDILoop] Deleting parcel', parcel, 'because someone took it.');
                 parcels.delete(p_id);
                 parcel_timers.delete(p_id);
                 continue;

@@ -1,4 +1,4 @@
-;; domain file: domain-lights.pddl
+;; domain file: domain-deliveroo.pddl
 (define (domain default)
     (:requirements :strips)
     (:predicates
@@ -24,6 +24,46 @@
         :effect (and
             (at ?me ?to)
 			(not (at ?me ?from))
+        )
+    )
+
+
+        (:action left
+        :parameters (?me ?from ?to)
+        :precondition (and
+            (me ?me)
+            (at ?me ?from)
+            (left ?from ?to)
+        )
+        :effect (and
+            (at ?me ?to)
+            (not (at ?me ?from))
+        )
+    )
+
+    (:action up
+        :parameters (?me ?from ?to)
+        :precondition (and
+            (me ?me)
+            (at ?me ?from)
+            (up ?from ?to)
+        )
+        :effect (and
+            (at ?me ?to)
+            (not (at ?me ?from))
+        )
+    )
+
+    (:action down
+        :parameters (?me ?from ?to)
+        :precondition (and
+            (me ?me)
+            (at ?me ?from)
+            (down ?from ?to)
+        )
+        :effect (and
+            (at ?me ?to)
+            (not (at ?me ?from))
         )
     )
 )

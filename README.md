@@ -57,5 +57,10 @@ To test the planner
 ./fast-downward.py misc/tests/benchmarks/miconic/s1-0.pddl --search "astar(operatorcounting([lmcut_constraints()]))"
 ```
 
+To use the planner on our pddl
+```
+./fast-downward.py ../path/to/ASAProject/domain-deliveroo.pddl ../path/to/ASAProject/problem-deliveroo.pddl --search "astar(lmcut())"
+```
+
 
 

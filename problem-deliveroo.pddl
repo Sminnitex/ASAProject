@@ -7,10 +7,7 @@
         parcel1 - parcel
     )
     (:init
-        (tile a1) (tile a2) (tile a3) (tile a4) (tile a5) (tile a6) (tile a7) (tile a8) (tile a9) (tile a10)
-        (agent agent1)
         (me agent1)
-        (parcel parcel1)
         (at agent1 a1)
         (at parcel1 a5)
         (right a1 a2) (right a2 a3) (right a3 a4) (right a4 a5)

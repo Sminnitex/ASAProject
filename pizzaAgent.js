@@ -1,12 +1,14 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { PddlDomain, PddlAction, PddlProblem, PddlExecutor, onlineSolver, Beliefset } from "@unitn-asa/pddl-client";
+import fs from 'fs';
 
 const client = new DeliverooApi(
     'http://localhost:8080/',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImU4NjkzZGY1ZTFkIiwibmFtZSI6Ik11bmljaE1hZmlhIiwiaWF0IjoxNzE1MTUzODUxfQ.N_BV1-iprJHuTK0U4vg68MzrifVhW6fuxe4TGzBDvx0'
 )
 
-let domain = await readFile('./domain-deliveroo.pddl' );
+
+
 
 //General purpose functions
 
@@ -150,6 +152,15 @@ async function findPath(start, target) {
     // No path found
     console.log('[FindPath] No path found.');
     return [];
+}
+
+function readFile ( path ) {   
+    return new Promise( (res, rej) => {
+        fs.readFile( path, 'utf8', (err, data) => {
+            if (err) rej(err)
+            else res(data)
+        })
+    })
 }
 
 /**
@@ -342,7 +353,6 @@ class Agent {
                     // check if someone (including me) already has the parcel
                     const args = intention.get_args()[0][0];
                     if (parcels.get(args.id) == undefined || parcels.get(args.id).carriedBy != null){
-                        console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue; 
                     }
                 }
@@ -356,14 +366,12 @@ class Agent {
                     }
                     if (!carrying_parcels){
                         const args = intention.get_args()[0][0];
-                        console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue;
                     } 
                 }
                 else if(intention.get_desire() == 'move'){
                     if (!explore){
                         const args = intention.get_args()[0][0];
-                        console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue;
                     }
                 }
@@ -594,6 +602,31 @@ class RandomMove extends Plan {
     }
 
     async execute(...args) {
+        //PDDL
+let domain = await readFile('./domain-deliveroo.pddl' );
+
+var pddlProblem = new PddlProblem(
+    'deliveroo',
+    'agent1 - agent',
+    '(me agent1)',
+    'and (me agent1)'
+)
+
+let problem = pddlProblem.toPddlString();
+console.log(problem)
+var plan = await onlineSolver(domain, problem);
+console.log( plan );
+
+const pddlExecutor = new PddlExecutor( 
+    { name: 'right', executor: (l)=>console.log('exec right '+l) },
+    { name: 'left', executor: (l)=>console.log('exec left '+l) },
+    { name: 'down', executor: (l)=>console.log('exec down '+l) },
+    { name: 'up', executor: (l)=>console.log('exec up '+l) },
+    { name: 'pick-up', executor: (l)=>console.log('exec pickup '+l) },
+    { name: 'deliver', executor: (l)=>console.log('exec deliver '+l) },
+    { name: 'drop-off', executor: (l)=>console.log('exec drop-off '+l) }
+);
+pddlExecutor.exec( plan );
         explore = false;
         let array_args = args.shift().shift();
 		let x = array_args['x'];

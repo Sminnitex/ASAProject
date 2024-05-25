@@ -1,5 +1,5 @@
 ;; domain file: domain-deliveroo.pddl
-(define (domain deliveroo)
+(define (domain default)
     (:requirements :strips :typing)
     (:types
         tile

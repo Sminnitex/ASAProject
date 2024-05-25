@@ -14,6 +14,7 @@
         (left ?t1 ?t2 - tile)
         (up ?t1 ?t2 - tile)
         (down ?t1 ?t2 - tile)
+        (holding ?a - agent ?p - parcel)
     )
     
     ;; Action to move right
@@ -71,4 +72,44 @@
             (not (at ?me ?from))
         )
     )
+
+    ;; Action to deliver
+    (:action deliver
+        :parameters (?me - agent ?p - parcel ?t - tile)
+        :precondition (and
+            (at ?me ?t)
+            (at ?p ?t)
+        )
+        :effect (and
+            (delivery ?t)
+            (not (at ?p ?t))  ; Assuming the parcel is considered delivered and removed from the tile
+        )
+    )
+
+    ;; Action to pick-up
+    (:action pick-up
+        :parameters (?me - agent ?p - parcel ?t - tile)
+        :precondition (and
+            (at ?me ?t)
+            (at ?p ?t)
+        )
+        :effect (and
+            (holding ?me ?p) 
+            (not (at ?p ?t))
+        )
+    )
+
+    ;; Action to drop-off
+    (:action drop-off
+        :parameters (?me - agent ?p - parcel ?t - tile)
+        :precondition (and
+            (holding ?me ?p)
+            (at ?me ?t)
+        )
+        :effect (and
+            (at ?p ?t)
+            (not (holding ?me ?p))
+        )
+    )
+
 )

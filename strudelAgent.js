@@ -57,7 +57,7 @@ function RemoveInvalidObjects(beliefSet) {
     });
   }
 
-async function createPddlProblem(x, y){
+  async function createPddlProblem(x, y){
     const myBeliefset = new Beliefset();
     myBeliefset.declare( 'me ' + me.name );
 
@@ -73,22 +73,18 @@ async function createPddlProblem(x, y){
         myBeliefset.toPddlString(),
         'at ' + me.name + ' ' + start_char + x  + separator + y 
         )
-    }else{
-        myBeliefset.declare('at p1 ' + start_char + x + separator + y);
+    }else if (myAgent.intention_queue[0]?.get_desire() === 'go_to'){
         myBeliefset.declare( 'at ' + me.name + ' ' + start_char + me.x +  separator + me.y);
-        let myargs = select_closest_tile(deliveryTile);
-        let deliveryx = myargs['x'];
-        let deliveryy = myargs['y'];
 
         let init = generateTileInit(tile);
         myBeliefset.declare(init.substring(1, init.length - 1));
         RemoveInvalidObjects(myBeliefset);
 
         var pddlProblem = new PddlProblem(
-            'deliveroo-deliver',
-            myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(2).join(" ") + " - tile\n" + "p1" + " - parcel",
+            'deliveroo-go_to',
+            myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(1).join(" ") + " - tile\n" + "p1" + " - parcel",
             myBeliefset.toPddlString(),
-            'delivery ' + start_char + deliveryx + separator + deliveryy
+            'at ' + start_char + x + separator + y
             )
     }
     
@@ -722,6 +718,14 @@ class GoPickUp extends Plan{
 		let x = array_args['x'];
 		let y = array_args['y'];
 
+        if (partnerId !== undefined){
+            let result = await exchangeCoordinates(x, y);
+            if(result){
+                console.log("[BlindMove] Other agent on it! Changing intention");
+                this.stop();
+            }
+        }
+
         let res = await this.subIntention('go_to', x, y);
         if (!res){
             return false;
@@ -747,19 +751,11 @@ class BlindMove extends Plan {
     isApplicableTo ( desire ) {
 		return desire == 'go_to';
     }
-
     async execute ( x, y ) {
-        // check coordinates with other agent
-        if (partnerId !== undefined){
-            let result = await exchangeCoordinates(x, y);
-            if(result){
-                console.log("[BlindMove] Other agent on it! Changing intention");
-                this.stop();
-            }
-        }
-
         try {
             const path = await createPddlProblem(x, y);
+            console.log(path.at(0).action)
+            console.log(path.at(0).args)
             if (path.length > 0){
                 for (const step of path){
                     if (step.action == 'LEFT'){
@@ -774,48 +770,14 @@ class BlindMove extends Plan {
                     else if (step.action == 'DOWN'){
                         await client.move('down');
                     }
-                    else if (step.action == 'PICK-UP'){
-                        await client.pickup();
-                    }
-                    else if (step.action == 'DROP-OFF'){
-                        let putdown_result = await client.putdown();        
-
-                        if(putdown_result.length > 0){
-                            // remove all parcels that were put down from parcel map (otherwise, it will get stuck on delivery tile)
-                            for (const [p_id, parcel] of parcels.entries()){
-                                if (parcel.carriedBy == me.id){
-                                    parcels.delete(p_id);
-                                    parcel_timers.delete(p_id);
-                                }
-                            }
-                        }
-                    }
                 }
             }
-
             return true;
         } catch(e){
             explore = true;
             console.log('[BlindMove] Stuck.');
             return false;
         }
-        // const start = { x: me.x, y: me.y };
-        // const target = { x, y };
-        // const path = await findPath(start, target);
-        
-		// if (path.length > 0){
-        //     for (const { x: nextX, y: nextY } of path) {
-        //         await moveTowards(nextX, nextY);
-        //     }
-
-        //     console.log('[BlindMove] Target reached.');
-        //     return true;
-        // }else {
-        //     explore = true;
-        //     console.log('[BlindMove] Stuck.');
-        //     return false;
-        // }
-
     }
 }
 

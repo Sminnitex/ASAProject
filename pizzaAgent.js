@@ -4,7 +4,7 @@ import fs from 'fs';
 
 const client = new DeliverooApi(
     'http://localhost:8080/',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImU4NjkzZGY1ZTFkIiwibmFtZSI6Ik11bmljaE1hZmlhIiwiaWF0IjoxNzE1MTUzODUxfQ.N_BV1-iprJHuTK0U4vg68MzrifVhW6fuxe4TGzBDvx0'
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Ijg2Njk1ZDM5ZGFjIiwibmFtZSI6Ik11bmljaE1hZmlhXzEiLCJpYXQiOjE3MTc0MTY1MDh9.4bNvXhzn2OQpOcVVc2M_ypwvajh9g5MOalux23eumLA'
 )
 
 function readFile ( path ) {   
@@ -94,7 +94,6 @@ async function createPddlProblem(x, y){
     
     let problem = pddlProblem.toPddlString();
     var plan = await onlineSolver(domain, problem);
-    console.log(plan)
     return plan;
     
 }
@@ -244,6 +243,59 @@ async function findPath(start, target) {
     return [];
 }
 
+async function exchangeCoordinates(x, y) {
+    // Create the coordinate string
+    let coordinates = `${x},${y}`;
+
+    // Send the coordinates to another agent
+    let reply = await client.ask(partnerId, coordinates); //MunichMafia_1 id
+    
+    // Create a promise to wait for the response
+    return new Promise((resolve, reject) => {
+        // Listen for the response
+        client.onMsg((id, name, msg, reply) => {
+
+            // Compare the received coordinates with the sent coordinates
+            let receivedCoordinates = msg;
+            let isSame = coordinates === receivedCoordinates;
+
+            if (reply) {
+                try {
+                    // Send back the comparison result
+                    reply(coordinates);
+                } catch (error) {
+                    console.error(error);
+                }
+            }
+
+            // Resolve the promise with the comparison result
+            resolve(isSame);
+        });
+    });
+}
+
+function getCurrentCoordinates(){
+    if (myAgent.intention_queue.length > 0){
+        if(myAgent.intention_queue[0]?.get_desire() === 'move' || myAgent.intention_queue[0]?.get_desire() === 'go_pick_up' || myAgent.intention_queue[0]?.get_desire() === 'deliver'){
+            let array_args = myAgent.intention_queue[0]?.get_args()
+            array_args = array_args[0][0];
+            let x = array_args['x'];
+            let y = array_args['y'];  
+            return {x, y};
+        }
+    
+        if(myAgent.intention_queue[0]?.get_desire() === 'go_to'){
+            let x, y = myAgent.intention_queue[0]?.get_args()
+            return {x, y};
+        }
+    }
+    else {
+        let x = undefined;
+        let y = undefined;
+        return {x, y};
+    }
+}
+
 
 /**
 * Sensing
@@ -303,6 +355,7 @@ client.onTile( ( x, y, delivery ) => {
     }
 } );
 
+
 const agents = new Map();
 client.onAgentsSensing ((perceived_agents) =>{
     for (const a of perceived_agents){
@@ -310,8 +363,38 @@ client.onAgentsSensing ((perceived_agents) =>{
     }
 })
 
+let partnerId;
+client.onMsg((id, name, msg, reply) => {
+    if (partnerId == undefined && name == 'MunichMafia_2'){
+        partnerId = id;
+        console.log('PARTNER ID', partnerId)
+        client.say(partnerId, 'stop broadcasting your id.')
+    }
+    if (id == partnerId && msg === 'stop broadcasting your id.'){
+        broadcast_id = false;
+    }
+    
+    if(name === "MunichMafia_2"){
+         // Get the current coordinates of the agent
+        let { x, y } = getCurrentCoordinates();
+        let currentCoordinates = `${x},${y}`;
+
+        if (reply) {
+            try {
+                // Send back the current coordinates
+                reply(currentCoordinates);
+            } catch (error) {
+                console.error(error);
+            }
+        }
+    }
+   
+});
+
+
 
 let explore = false;
+let broadcast_id = true;
 
 /**
 * BDI Control Loop
@@ -324,6 +407,10 @@ function agentLoop() {
      */
 
 	const options = [];
+
+    if (broadcast_id){
+        client.shout("HELLO");
+    }
 
 	for (const [p_id, parcel] of parcels.entries()){
         if (parcel.reward <= 1){
@@ -664,6 +751,14 @@ class BlindMove extends Plan {
     }
 
     async execute ( x, y ) {
+        if (partnerId !== undefined){
+            let result = await exchangeCoordinates(x, y);
+            if(result){
+                console.log("[BlindMove] Other agent on it! Changing intention");
+                this.stop();
+            }
+        }
+
         try {
             const path = await createPddlProblem(x, y);
             console.log(path.at(0).action)

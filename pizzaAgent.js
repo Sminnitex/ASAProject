@@ -1,10 +1,104 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { PddlDomain, PddlAction, PddlProblem, PddlExecutor, onlineSolver, Beliefset } from "@unitn-asa/pddl-client";
+import fs from 'fs';
 
 const client = new DeliverooApi(
     'http://localhost:8080/',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImU4NjkzZGY1ZTFkIiwibmFtZSI6Ik11bmljaE1hZmlhIiwiaWF0IjoxNzE1MTUzODUxfQ.N_BV1-iprJHuTK0U4vg68MzrifVhW6fuxe4TGzBDvx0'
 )
+
+function readFile ( path ) {   
+    return new Promise( (res, rej) => {
+        fs.readFile( path, 'utf8', (err, data) => {
+            if (err) rej(err)
+            else res(data)
+        })
+    })
+}
+
+//PDDL
+var start_char = "t";
+var separator = "_";
+let domain = await readFile('./domain-deliveroo.pddl' );
+
+
+function generateTileInit(tileMap) {
+    let initStr = '';
+
+    for (let [x, col] of tileMap.entries()) {
+        for (let [y, tile] of col.entries()) {
+            let currentTile = `${start_char}${x}${separator}${y}`;
+            
+            // Right relationship
+            if (tileMap.has(x + 1) && tileMap.get(x + 1).has(y)) {
+                let rightTile = `${start_char}${x + 1}${separator}${y}`;
+                initStr += `(right ${currentTile} ${rightTile}) `;
+                initStr += `(left ${rightTile} ${currentTile}) `;
+            }
+
+            // Up relationship
+            if (tileMap.has(x) && tileMap.get(x).has(y + 1)) {
+                let upTile = `${start_char}${x}${separator}${y + 1}`;
+                initStr += `(down ${upTile} ${currentTile}) `;
+                initStr += `(up ${currentTile} ${upTile}) `;
+            }
+        }
+    }
+
+    return initStr.trim();
+}
+
+function RemoveInvalidObjects(beliefSet) {
+    const invalidCharacters = ['(', ')'];
+    beliefSet.objects.forEach(obj => {
+      if (invalidCharacters.some(char => obj.includes(char))) {
+        beliefSet.removeObject(obj);
+      } 
+    });
+  }
+
+async function createPddlProblem(x, y){
+    const myBeliefset = new Beliefset();
+    myBeliefset.declare( 'me ' + me.name );
+
+    if(myAgent.intention_queue[0]?.get_desire() === 'move'){
+        myBeliefset.declare( 'at ' + me.name + ' ' + start_char + me.x +  separator + me.y);
+        let init = generateTileInit(tile);
+        myBeliefset.declare(init.substring(1, init.length - 1));
+        RemoveInvalidObjects(myBeliefset);
+
+        var pddlProblem = new PddlProblem(
+        'deliveroo-move',
+        myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(1).join(" ") + " - tile\n" + "p11 - parcel",
+        myBeliefset.toPddlString(),
+        'at ' + me.name + ' ' + start_char + x  + separator + y 
+        )
+    }else{
+        myBeliefset.declare('at p1 ' + start_char + x + separator + y);
+        myBeliefset.declare( 'at ' + me.name + ' ' + start_char + me.x +  separator + me.y);
+        let myargs = select_closest_tile(deliveryTile);
+        let deliveryx = myargs['x'];
+        let deliveryy = myargs['y'];
+
+        let init = generateTileInit(tile);
+        myBeliefset.declare(init.substring(1, init.length - 1));
+        RemoveInvalidObjects(myBeliefset);
+
+        var pddlProblem = new PddlProblem(
+            'deliveroo-deliver',
+            myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(2).join(" ") + " - tile\n" + "p1" + " - parcel",
+            myBeliefset.toPddlString(),
+            'delivery ' + start_char + deliveryx + separator + deliveryy
+            )
+    }
+    
+    let problem = pddlProblem.toPddlString();
+    var plan = await onlineSolver(domain, problem);
+    console.log(plan)
+    return plan;
+    
+}
+
 
 //General purpose functions
 
@@ -149,6 +243,7 @@ async function findPath(start, target) {
     console.log('[FindPath] No path found.');
     return [];
 }
+
 
 /**
 * Sensing
@@ -569,22 +664,65 @@ class BlindMove extends Plan {
     }
 
     async execute ( x, y ) {
-        const start = { x: me.x, y: me.y };
-        const target = { x, y };
-        const path = await findPath(start, target);
-        
-		if (path.length > 0){
-            for (const { x: nextX, y: nextY } of path) {
-                await moveTowards(nextX, nextY);
+        try {
+            const path = await createPddlProblem(x, y);
+            console.log(path.at(0).action)
+            console.log(path.at(0).args)
+            if (path.length > 0){
+                for (const step of path){
+                    if (step.action == 'LEFT'){
+                        await client.move('left');
+                    }
+                    else if (step.action == 'RIGHT'){
+                        await client.move('right');
+                    }
+                    else if (step.action == 'UP'){
+                        await client.move('up');
+                    }
+                    else if (step.action == 'DOWN'){
+                        await client.move('down');
+                    }
+                    else if (step.action == 'PICK-UP'){
+                        await client.pickup();
+                    }
+                    else if (step.action == 'DROP-OFF'){
+                        let putdown_result = await client.putdown();        
+
+                        if(putdown_result.length > 0){
+                            // remove all parcels that were put down from parcel map (otherwise, it will get stuck on delivery tile)
+                            for (const [p_id, parcel] of parcels.entries()){
+                                if (parcel.carriedBy == me.id){
+                                    parcels.delete(p_id);
+                                    parcel_timers.delete(p_id);
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            console.log('[BlindMove] Target reached.');
             return true;
-        }else {
+        } catch(e){
             explore = true;
             console.log('[BlindMove] Stuck.');
             return false;
         }
+        // const start = { x: me.x, y: me.y };
+        // const target = { x, y };
+        // const path = await findPath(start, target);
+        
+		// if (path.length > 0){
+        //     for (const { x: nextX, y: nextY } of path) {
+        //         await moveTowards(nextX, nextY);
+        //     }
+
+        //     console.log('[BlindMove] Target reached.');
+        //     return true;
+        // }else {
+        //     explore = true;
+        //     console.log('[BlindMove] Stuck.');
+        //     return false;
+        // }
 
     }
 }

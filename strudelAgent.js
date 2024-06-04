@@ -57,11 +57,24 @@ function RemoveInvalidObjects(beliefSet) {
     });
   }
 
-  async function createPddlProblem(x, y){
+  async function createPddlProblem(x, y, onMsg){
     const myBeliefset = new Beliefset();
     myBeliefset.declare( 'me ' + me.name );
 
-    if(myAgent.intention_queue[0]?.get_desire() === 'move'){
+    if (onMsg){
+        myBeliefset.declare( 'at ' + me.name + ' ' + start_char + Math.round(me.x) +  separator + Math.round(me.y));
+
+        let init = generateTileInit(tile);
+        myBeliefset.declare(init.substring(1, init.length - 1));
+        RemoveInvalidObjects(myBeliefset);
+
+        var pddlProblem = new PddlProblem(
+            'deliveroo-can_you_go',
+            myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(1).join(" ") + " - tile\n" + "p1" + " - parcel",
+            myBeliefset.toPddlString(),
+            'at ' + me.name + ' ' + start_char + x + separator + y
+            )
+    } else if(myAgent.intention_queue[0]?.get_desire() === 'move'){
         myBeliefset.declare( 'at ' + me.name + ' ' + start_char + me.x +  separator + me.y);
         let init = generateTileInit(tile);
         myBeliefset.declare(init.substring(1, init.length - 1));
@@ -73,7 +86,7 @@ function RemoveInvalidObjects(beliefSet) {
         myBeliefset.toPddlString(),
         'at ' + me.name + ' ' + start_char + x  + separator + y 
         )
-    }else if (myAgent.intention_queue[0]?.get_desire() === 'go_to'){
+    } else if (myAgent.intention_queue[0]?.get_desire() === 'go_to'){
         myBeliefset.declare( 'at ' + me.name + ' ' + start_char + me.x +  separator + me.y);
 
         let init = generateTileInit(tile);
@@ -267,6 +280,9 @@ client.onYou( ( {id, name, x, y, score} ) => {
 
 const parcels = new Map();
 const parcel_timers = new Map();
+
+const blacklisted_parcels = new Map();  // the ones we don't want to pick up anymore
+
 client.onParcelsSensing( async ( perceived_parcels ) => {
     for (const p of perceived_parcels) {
 		// p is {id, x, y, carriedBy, reward}
@@ -275,43 +291,12 @@ client.onParcelsSensing( async ( perceived_parcels ) => {
     }
     for (const [p_id, time] of parcel_timers.entries()){
         if (Date.now() - time >= PARCEL_REWARD_AVG * PARCEL_DECADING_INTERVAL){
-            console.log('[Parcels] Removing parcel ', p_id, '.')
             parcels.delete(p_id);
             parcel_timers.delete(p_id);
+            blacklisted_parcels.delete(p_id);
         }
     }
 } )
-
-async function exchangeCoordinates(x, y) {
-    // Create the coordinate string
-    let coordinates = `${x},${y}`;
-
-    // Send the coordinates to another agent
-    await client.ask(partnerId, coordinates); //MunichMafia_1 id
-
-    // Create a promise to wait for the response
-    return new Promise((resolve, reject) => {
-        // Listen for the response
-        client.onMsg((id, name, msg, reply) => {
-
-            // Compare the received coordinates with the sent coordinates
-            let receivedCoordinates = msg;
-            let isSame = coordinates === receivedCoordinates;
-
-            if (reply) {
-                try {
-                    // Send back the comparison result
-                    reply(coordinates);
-                } catch (error) {
-                    console.error(error);
-                }
-            }
-
-            // Resolve the promise with the comparison result
-            resolve(isSame);
-        });
-    });
-}
 
 function getCurrentCoordinates(){
     if (myAgent.intention_queue.length > 0){
@@ -358,40 +343,56 @@ client.onAgentsSensing ((perceived_agents) =>{
     }
 })
 
-
 let partnerId;
-client.onMsg((id, name, msg, reply) => {
+client.onMsg(async (id, name, msg, reply) => {
     if (partnerId == undefined && name == 'MunichMafia_1'){
         partnerId = id;
-        console.log('PARTNER ID ', partnerId)
+        console.log('PARTNER ID', partnerId)
         client.say(partnerId, 'stop broadcasting your id.')
     }
     if (id == partnerId && msg === 'stop broadcasting your id.'){
         broadcast_id = false;
     }
-    // Get the current coordinates of the agent
-    let { x, y } = getCurrentCoordinates();
-    let currentCoordinates = `${x},${y}`;
 
-    if (reply) {
-        try {
-            // Send back the current coordinates
-            reply(currentCoordinates);
-        } catch (error) {
-            console.error(error);
+    if(name === "MunichMafia_1"){
+        let msg_split = msg.split(",");
+
+        // Delivery
+        if(msg_split[2] === 'can you go there?'){
+            let reach = await createPddlProblem(parseFloat(msg_split[0]), parseFloat(msg_split[1]), true)
+            if(reach.length > 0){
+                reply(String(true));
+            }
+            else {
+                reply(String(false));
+            }
         }
+
+        // Pickup
+        if (msg_split[2] == 'where are you going?'){
+             // Get the current coordinates of the agent
+            let { x, y } = getCurrentCoordinates();
+            let currentCoordinates = `${x},${y}`;
+
+            if (reply) {
+                try {
+                    // Send back the current coordinates
+                    reply(currentCoordinates);
+                } catch (error) {
+                    console.error(error);
+                }
+            }
+        }  
     }
 });
 
 
 let explore = false;
+let broadcast_id = true;
 
 /**
 * BDI Control Loop
 **/
-
-
-let broadcast_id = true;
 
 function agentLoop() {
     
@@ -401,14 +402,12 @@ function agentLoop() {
 
 	const options = [];
 
-    if (broadcast_id){
+    if (broadcast_id && partnerId === undefined){
         client.shout("HELLO");
     }
     
-    
 	for (const [p_id, parcel] of parcels.entries()){
         if (parcel.reward <= 1){
-            console.log('[BDILoop] Deleting parcel', parcel, 'because the timer ran out.');
             parcels.delete(p_id);
             parcel_timers.delete(p_id);
             continue;
@@ -424,7 +423,6 @@ function agentLoop() {
                 continue;
             }
             else {
-                console.log('[BDILoop] Deleting parcel', parcel, 'because someone took it.');
                 parcels.delete(p_id);
                 parcel_timers.delete(p_id);
                 continue;
@@ -475,7 +473,7 @@ function agentLoop() {
                // nearest_distance = distance_to_option;
           //  } 
            
-           // execute move immediately because we are either stuck or have nocthing else to do
+           // execute move immediately because we are either stuck or have nothing else to do
            best_option = option;
            nearest_distance = distance(me, option.args[0]);
            break;
@@ -511,17 +509,32 @@ class Agent {
         
             if (intention){
                 /**
-                 * Intention Revision: chek if desires are still valid
+                 * Intention Revision: check if desires are still valid
                  */
 
 
                 if (intention.get_desire() == 'go_pick_up'){
                     // check if someone (including me) already has the parcel
                     const args = intention.get_args()[0][0];
-                    if (parcels.get(args.id) == undefined || parcels.get(args.id).carriedBy != null){
-                        console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
+                    if (parcels.get(args.id) == undefined || parcels.get(args.id).carriedBy != null || blacklisted_parcels.get(args.id) != undefined){
+                        //console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue; 
                     }
+
+                    // check if my partner is already going in that direction
+                    if (partnerId !== undefined){
+                        let reply = await client.ask(partnerId, `${args.x},${args.y}` + ',where are you going?');
+
+                        let coordinates = reply.split(",")
+                        var other_x = parseFloat(coordinates[0]);
+                        var other_y = parseFloat(coordinates[1]);
+                        
+                        if((distance({x: args.x, y: args.y}, {x: other_x, y: other_y})) <= 3){
+                            console.log("[A] Other agent too close! Changing intention");
+                            continue;
+                        }
+                    }
+
                 }
                 else if (intention.get_desire() == 'deliver'){
                     // check if I am holding a parcel
@@ -533,14 +546,14 @@ class Agent {
                     }
                     if (!carrying_parcels){
                         const args = intention.get_args()[0][0];
-                        console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
+                       // console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue;
                     } 
                 }
                 else if(intention.get_desire() == 'move'){
                     if (!explore){
                         const args = intention.get_args()[0][0];
-                        console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
+                       // console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue;
                     }
                 }
@@ -689,6 +702,24 @@ class Delivery extends Plan{
     
         let res = await this.subIntention('go_to', x, y);
         if (!res){
+            if (partnerId !== undefined){
+                let reply = await client.ask(partnerId, `${x},${y}`+',can you go there?')
+                
+                // ask other agent to help
+                if (Boolean(reply)){
+                    console.log('[Delivery] Drop parcels for other agent to pick up.')
+                    // blacklist all parcels I am carrying
+                    for (const [p_id, parcel] of parcels.entries()){
+                        if (parcel.carriedBy == me.id){
+                            blacklisted_parcels.set(p_id, parcel);
+                        }
+                    }
+
+                    // put all parcels down
+                    client.putdown(); 
+                }
+            }
+            
             return false;
         }
 
@@ -718,14 +749,6 @@ class GoPickUp extends Plan{
 		let x = array_args['x'];
 		let y = array_args['y'];
 
-        if (partnerId !== undefined){
-            let result = await exchangeCoordinates(x, y);
-            if(result){
-                console.log("[BlindMove] Other agent on it! Changing intention");
-                this.stop();
-            }
-        }
-
         let res = await this.subIntention('go_to', x, y);
         if (!res){
             return false;
@@ -751,9 +774,10 @@ class BlindMove extends Plan {
     isApplicableTo ( desire ) {
 		return desire == 'go_to';
     }
+    
     async execute ( x, y ) {
         try {
-            const path = await createPddlProblem(x, y);
+            const path = await createPddlProblem(x, y, false);
             console.log(path.at(0).action)
             console.log(path.at(0).args)
             if (path.length > 0){
@@ -771,8 +795,10 @@ class BlindMove extends Plan {
                         await client.move('down');
                     }
                 }
+                return true;
             }
-            return true;
+            return false;
+        
         } catch(e){
             explore = true;
             console.log('[BlindMove] Stuck.');

@@ -1,6 +1,7 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { PddlDomain, PddlAction, PddlProblem, PddlExecutor, onlineSolver, Beliefset } from "@unitn-asa/pddl-client";
 import fs from 'fs';
+import { parse } from "path";
 
 const client = new DeliverooApi(
     'http://localhost:8080/',
@@ -296,6 +297,17 @@ client.onParcelsSensing( async ( perceived_parcels ) => {
             blacklisted_parcels.delete(p_id);
         }
     }
+
+    // send parcels to partner to exchange environment information
+    if (partnerId !== undefined && parcels.size > 0){
+        var parcelString = `Parcels,${parcels.size},`;
+        for (const [p_id, p] of parcels.entries()){
+            parcelString += `${p.id}-${p.x}-${p.y}-${p.carriedBy}-${p.reward},`
+        }
+        console.log(parcels)
+        console.log(parcelString)
+        client.say(partnerId, parcelString);
+    }
 } )
 
 function getCurrentCoordinates(){
@@ -382,7 +394,29 @@ client.onMsg(async (id, name, msg, reply) => {
                     console.error(error);
                 }
             }
-        }  
+        }
+        
+        // Parcels
+        if (msg_split[0] === 'Parcels'){
+            for (var i=0; i<parseInt(msg_split[1]); i++){
+                var parcel = msg_split[2 + i].split("-");
+                var id = parcel[0];
+                var x = parseInt(parcel[1]);
+                var y = parseInt(parcel[2]);
+                var carriedBy;
+                if (parcel[3] === 'null'){
+                    carriedBy = null;
+                }
+                else {
+                    carriedBy = parcel[3];
+                }
+                var reward = parseInt(parcel[4]);
+
+                parcels.set(id, {id, x, y, carriedBy, reward});
+                parcel_timers.set(id, Date.now());
+            }
+        }
+
     }
 });
 

@@ -327,8 +327,6 @@ client.onParcelsSensing( async ( perceived_parcels ) => {
         for (const [p_id, p] of parcels.entries()){
             parcelString += `${p.id}-${p.x}-${p.y}-${p.carriedBy}-${p.reward},`
         }
-        console.log(parcels)
-        console.log(parcelString)
         client.say(partnerId, parcelString);
     }
 } )
@@ -353,6 +351,15 @@ const agents = new Map();
 client.onAgentsSensing ((perceived_agents) =>{
     for (const a of perceived_agents){
         agents.set(a.id, a);
+    }
+
+    // send agents to partner to exchange environment information
+    if (partnerId !== undefined && agents.size > 0){
+        var agentString = `Agents,${agents.size},`;
+        for (const [a_id, a] of agents.entries()){
+            agentString += `${a.id}-${a.name}-${a.x}-${a.y}-${a.score},`
+        }
+        client.say(partnerId, agentString);
     }
 })
 
@@ -416,6 +423,20 @@ client.onMsg(async (id, name, msg, reply) => {
 
                 parcels.set(id, {id, x, y, carriedBy, reward});
                 parcel_timers.set(id, Date.now());
+            }
+        }
+
+        // Agents
+        if (msg_split[0] === 'Agents'){
+            for (var i=0; i<parseInt(msg_split[1]); i++){
+                var agent = msg_split[2 + i].split("-");
+                var id = agent[0];
+                var name = agent[1];
+                var x = parseFloat(agent[2]);
+                var y = parseFloat(agent[3]);
+                var score = parseInt(agent[4]);
+
+                agents.set(id, {id, name, x, y, score});
             }
         }
     }

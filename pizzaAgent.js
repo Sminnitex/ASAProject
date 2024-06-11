@@ -302,6 +302,7 @@ client.onYou( ( {id, name, x, y, score} ) => {
         me.score = score;
 } )
 
+let parcel_timer = Date.now();
 const parcels = new Map();
 const parcel_timers = new Map();
 
@@ -322,7 +323,9 @@ client.onParcelsSensing( async ( perceived_parcels ) => {
     }
 
     // send parcels to partner to exchange environment information
-    if (partnerId !== undefined && parcels.size > 0){
+    if (partnerId !== undefined && parcels.size > 0 && Date.now() - parcel_timer > 5000){
+        parcel_timer = Date.now();  // send max. every 5s
+
         var parcelString = `Parcels,${parcels.size},`;
         for (const [p_id, p] of parcels.entries()){
             parcelString += `${p.id}-${p.x}-${p.y}-${p.carriedBy}-${p.reward},`
@@ -347,6 +350,7 @@ client.onTile( ( x, y, delivery ) => {
     }
 } );
 
+let agent_timer = Date.now();
 const agents = new Map();
 client.onAgentsSensing ((perceived_agents) =>{
     for (const a of perceived_agents){
@@ -354,7 +358,9 @@ client.onAgentsSensing ((perceived_agents) =>{
     }
 
     // send agents to partner to exchange environment information
-    if (partnerId !== undefined && agents.size > 0){
+    if (partnerId !== undefined && agents.size > 0 && Date.now() - agent_timer > 10000){
+        agent_timer = Date.now();  // send max. every 10s
+
         var agentString = `Agents,${agents.size},`;
         for (const [a_id, a] of agents.entries()){
             agentString += `${a.id}-${a.name}-${a.x}-${a.y}-${a.score},`
@@ -445,6 +451,7 @@ client.onMsg(async (id, name, msg, reply) => {
 
 let explore = false;
 let broadcast_id = true;
+let shout_timer = Date.now();
 
 /**
 * BDI Control Loop
@@ -459,7 +466,11 @@ function agentLoop() {
 	const options = [];
 
     if (broadcast_id && partnerId === undefined){
-        client.shout("HELLO");
+        if (Date.now() - shout_timer > 3000){
+            client.shout("HELLO");
+            shout_timer = Date.now();
+        }
+        
     }
 
 	for (const [p_id, parcel] of parcels.entries()){

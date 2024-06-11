@@ -253,7 +253,6 @@ async function findPath(start, target) {
     return [];
 }
 
-
 /**
 * Sensing
 **/

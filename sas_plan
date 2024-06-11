@@ -1,0 +1,8 @@
+(right agent1 a1 a2)
+(right agent1 a2 a3)
+(right agent1 a3 a4)
+(right agent1 a4 a5)
+(pick-up agent1 parcel1 a5)
+(down agent1 a5 a10)
+(drop-off agent1 parcel1 a10)
+; cost = 7 (unit cost)

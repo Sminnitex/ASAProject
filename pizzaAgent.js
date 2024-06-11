@@ -853,31 +853,6 @@ class RandomMove extends Plan {
     }
 
     async execute(...args) {
-        //PDDL
-let domain = await readFile('./domain-deliveroo.pddl' );
-
-var pddlProblem = new PddlProblem(
-    'deliveroo',
-    'agent1 - agent',
-    '(me agent1)',
-    'and (me agent1)'
-)
-
-let problem = pddlProblem.toPddlString();
-console.log(problem)
-var plan = await onlineSolver(domain, problem);
-console.log( plan );
-
-const pddlExecutor = new PddlExecutor( 
-    { name: 'right', executor: (l)=>console.log('exec right '+l) },
-    { name: 'left', executor: (l)=>console.log('exec left '+l) },
-    { name: 'down', executor: (l)=>console.log('exec down '+l) },
-    { name: 'up', executor: (l)=>console.log('exec up '+l) },
-    { name: 'pick-up', executor: (l)=>console.log('exec pickup '+l) },
-    { name: 'deliver', executor: (l)=>console.log('exec deliver '+l) },
-    { name: 'drop-off', executor: (l)=>console.log('exec drop-off '+l) }
-);
-pddlExecutor.exec( plan );
         explore = false;
         let array_args = args.shift().shift();
 		let x = array_args['x'];

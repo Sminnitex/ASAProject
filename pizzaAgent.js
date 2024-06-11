@@ -75,19 +75,7 @@ async function createPddlProblem(x, y, onMsg){
             'at ' + me.name + ' ' + start_char + x + separator + y
             )
 
-    } else if(myAgent.intention_queue[0]?.get_desire() === 'move'){
-        myBeliefset.declare( 'at ' + me.name + ' ' + start_char + me.x +  separator + me.y);
-        let init = generateTileInit(tile);
-        myBeliefset.declare(init.substring(1, init.length - 1));
-        RemoveInvalidObjects(myBeliefset);
-
-        var pddlProblem = new PddlProblem(
-        'deliveroo-move',
-        myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(1).join(" ") + " - tile\n" + "p11 - parcel",
-        myBeliefset.toPddlString(),
-        'at ' + me.name + ' ' + start_char + x  + separator + y 
-        )
-    } else if (myAgent.intention_queue[0]?.get_desire() === 'go_to'){
+    } else {  // this is for go-to
         myBeliefset.declare( 'at ' + me.name + ' ' + start_char + me.x +  separator + me.y);
 
         let init = generateTileInit(tile);
@@ -98,7 +86,7 @@ async function createPddlProblem(x, y, onMsg){
             'deliveroo-go_to',
             myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(1).join(" ") + " - tile\n" + "p1" + " - parcel",
             myBeliefset.toPddlString(),
-            'at ' + start_char + x + separator + y
+            'at ' + me.name + ' ' + start_char + x  + separator + y 
             )
     }
     
@@ -290,7 +278,6 @@ client.onConfig( (config) => {
     MOVEMENT_DURATION = config.MOVEMENT_DURATION;
     PARCEL_DECADING_INTERVAL = config.PARCEL_DECADING_INTERVAL == '1s' ? 1000 : 1000000;
     PARCEL_REWARD_AVG = config.PARCEL_REWARD_AVG;
-
 } );
 
 const me = {};
@@ -373,8 +360,8 @@ let partnerId;
 client.onMsg(async (id, name, msg, reply) => {
     if (partnerId == undefined && name == 'MunichMafia_2'){
         partnerId = id;
-        console.log('PARTNER ID', partnerId)
-        client.say(partnerId, 'stop broadcasting your id.')
+        console.log('PARTNER ID', partnerId)      
+          client.say(partnerId, 'stop broadcasting your id.')
     }
     if (id == partnerId && msg === 'stop broadcasting your id.'){
         broadcast_id = false;

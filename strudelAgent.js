@@ -831,6 +831,8 @@ class BlindMove extends Plan {
     
     async execute ( x, y ) {
         try {
+            explore = false;
+            
             const path = await createPddlProblem(x, y, false);
             if (path.length > 0){
                 for (const step of path){

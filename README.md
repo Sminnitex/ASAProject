@@ -43,24 +43,28 @@ node strudelAgent
 # Run in local with pddl planner
 
 To install the planner we used
+>   https://github.com/AI-Planning/planning-as-a-service
+We will copy the basic commands to run the planner from the repository down here
 ```
 sudo apt update
-sudo apt install cmake g++ make python3
-git clone https://github.com/aibasel/downward/
-cd downward
-./build.py
+sudo apt install cmake g++ make python3 docker
+git clone https://github.com/AI-Planning/planning-as-a-service
+cd planning-as-a-service/server
+```
+Now in the folder you should create a .env file (Is present a .env.example file that can be used)
+
+Once you created the .env file you can run
+```
+sudo make
 ```
 
-To test the planner
+To start the docker
 ```
-./fast-downward.py misc/tests/benchmarks/miconic/s1-0.pddl --search "astar(lmcut())"
-./fast-downward.py misc/tests/benchmarks/miconic/s1-0.pddl --search "astar(operatorcounting([lmcut_constraints()]))"
+docker compose up 
 ```
-
-To use the planner on our pddl
+To shut down
 ```
-./fast-downward.py ../path/to/ASAProject/domain-deliveroo.pddl ../path/to/ASAProject/problem-deliveroo.pddl --search "astar(lmcut())"
+docker compose down
 ```
-
 
 

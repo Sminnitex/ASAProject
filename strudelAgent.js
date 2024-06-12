@@ -2,11 +2,13 @@ import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { PddlDomain, PddlAction, PddlProblem, PddlExecutor, onlineSolver, Beliefset } from "@unitn-asa/pddl-client";
 import fs from 'fs';
 
+// server and key of the agent
 const client = new DeliverooApi(
     'http://localhost:8080/',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY2OTVkMzlkYWNiIiwibmFtZSI6Ik11bmljaE1hZmlhXzIiLCJpYXQiOjE3MTc0MTY1NDB9.YYMfHleSN8WE8tGb1viPIkH09VwoZhOcTkT9aTYMPPE'
 )
 
+// function to read the PDDL domain file
 function readFile ( path ) {   
     return new Promise( (res, rej) => {
         fs.readFile( path, 'utf8', (err, data) => {
@@ -16,9 +18,19 @@ function readFile ( path ) {
     })
 }
 
+/**
+* PDDL
+**/
+
+
+var start_char = "t";
+var separator = "_";
+let domain = await readFile('./domain-deliveroo.pddl' );  // read in domain file
+
+// function to check if an agent is in a certain tile
 function agentIn(x, y){
-    for (const [_, a] of agents.entries()){
-        if (a.x === x && a.y === y){
+    for (const [_, a] of agents.entries()){  // loop through all agents
+        if (a.x === x && a.y === y){  // check if they are on the tile
             return true;
         }
         else {
@@ -27,23 +39,22 @@ function agentIn(x, y){
     }
 }
 
-//PDDL
-var start_char = "t";
-var separator = "_";
-let domain = await readFile('./domain-deliveroo.pddl' );
 
 
+// generate the options LEFT, RIGHT, UP, DOWN for the PDDL problem for all tiles
 function generateTileInit(tileMap) {
     let initStr = '';
 
+    // loop through the map of tiles by row, then by column
     for (let [x, col] of tileMap.entries()) {
-        for (let [y, tile] of col.entries()) {
-            let currentTile = `${start_char}${x}${separator}${y}`;
+        for (let [y, _] of col.entries()) {
+            let currentTile = `${start_char}${x}${separator}${y}`;  // entry for current tile
             
-            // Right relationship
+            // LEFT and RIGHT relationship
             if (tileMap.has(x + 1) && tileMap.get(x + 1).has(y)) {
                 let rightTile = `${start_char}${x + 1}${separator}${y}`;
 
+                // check if tiles are occupied by agents before adding relationship
                 if (!agentIn(x, y)){
                     initStr += `(left ${rightTile} ${currentTile}) `;
                 }
@@ -52,10 +63,11 @@ function generateTileInit(tileMap) {
                 }      
             }
 
-            // Up relationship
+            // DOWN and UP relationship
             if (tileMap.has(x) && tileMap.get(x).has(y + 1)) {
                 let upTile = `${start_char}${x}${separator}${y + 1}`;
 
+                // check if tiles are occupied by agents before adding relationship
                 if (!agentIn(x, y)){
                     initStr += `(down ${upTile} ${currentTile}) `;
                 }
@@ -69,6 +81,7 @@ function generateTileInit(tileMap) {
     return initStr.trim();
 }
 
+// remove invalid characters from the PDDL problem file
 function RemoveInvalidObjects(beliefSet) {
     const invalidCharacters = ['(', ')'];
     beliefSet.objects.forEach(obj => {
@@ -76,8 +89,9 @@ function RemoveInvalidObjects(beliefSet) {
         beliefSet.removeObject(obj);
       } 
     });
-  }
+}
 
+// create a PDDL problem file to move to (x,y)
 async function createPddlProblem(x, y){
     const myBeliefset = new Beliefset();
     myBeliefset.declare( 'me ' + me.name );  // myself
@@ -94,30 +108,34 @@ async function createPddlProblem(x, y){
         myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(1).join(" ") + " - tile\n" + "p1" + " - parcel",
         myBeliefset.toPddlString(),
         'at ' + me.name + ' ' + start_char + x  + separator + y 
-        )
+        )  // the goal
     
     let problem = pddlProblem.toPddlString();
-    var plan = await onlineSolver(domain, problem);
+    var plan = await onlineSolver(domain, problem);  // solve the problem and receive plan
     return plan;  
 }
 
 
-//General purpose functions
+/**
+* General Purpose Functions
+**/
 
+// calculate the euclidean distance between two positions
 function distance( {x:x1, y:y1}, {x:x2, y:y2}) {
     const dx = Math.abs( Math.round(x1) - Math.round(x2) );
     const dy = Math.abs( Math.round(y1) - Math.round(y2) );
     return dx + dy;
 }
 
+// select the closest tile from a list of tiles
 function select_closest_tile (tiles){
     let nearest_distance = Number.MAX_VALUE;
     let closest_tile;
 
-    for (const tile of tiles){ 
-        const distance_tile = distance(me, tile);
+    for (const tile of tiles){  // loop through tiles
+        const distance_tile = distance(me, tile);  // calculate distance
 
-        if (distance_tile < nearest_distance){
+        if (distance_tile < nearest_distance){  // compare
              nearest_distance = distance_tile;
              closest_tile = tile;
         }
@@ -125,6 +143,7 @@ function select_closest_tile (tiles){
     return closest_tile;
 }
 
+// select a random tile from a list of weighted tiles
 function select_random_tile(tiles, weights) {
     // Calculate the total sum of the weights and generate a random value between 0 and total weight
     const totalWeight = weights.reduce((acc, weight) => acc + weight, 0);
@@ -139,13 +158,13 @@ function select_random_tile(tiles, weights) {
         }
     }
 
-
     // In case of some error, return a random tile
     const randomIndex = Math.floor(Math.random() * tiles.length);
     return tiles[randomIndex];
 }
 
 
+// select a random tile from the whole map
 function select_random_tile_from_map(map) {
     let allTiles = [];
     let weights = [];
@@ -158,8 +177,7 @@ function select_random_tile_from_map(map) {
         for (const [_, tile] of tiles) {
             allTiles.push(tile);
 
-            // Associate weights to have exploration more probable on tiles 
-            //closer to the center of the map
+            // Associate weights to have exploration more probable on tiles closer to the center of the map
             const distance_from_center = distance(tile, map_center);
             const weight = 1 / (distance_from_center + 1);
             weights.push(weight);
@@ -170,65 +188,8 @@ function select_random_tile_from_map(map) {
     return select_random_tile(allTiles, weights);
 }
 
-
-/**
-* Sensing
-**/
-
-var AGENTS_OBSERVATION_DISTANCE
-var MOVEMENT_DURATION
-var PARCEL_DECADING_INTERVAL
-var PARCEL_REWARD_AVG
-client.onConfig( (config) => {
-    AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
-    MOVEMENT_DURATION = config.MOVEMENT_DURATION;
-    PARCEL_DECADING_INTERVAL = config.PARCEL_DECADING_INTERVAL == '1s' ? 1000 : 1000000;
-    PARCEL_REWARD_AVG = config.PARCEL_REWARD_AVG;
-
-} );
-
-const me = {};
-client.onYou( ( {id, name, x, y, score} ) => {
-        me.id = id;
-        me.name = name;
-        me.x = x;
-        me.y = y;
-        me.score = score;
-} )
-
-let parcel_timer = Date.now();
-const parcels = new Map();
-const parcel_timers = new Map();
-
-const blacklisted_parcels = new Map();  // the ones we don't want to pick up anymore
-
-client.onParcelsSensing( async ( perceived_parcels ) => {
-    for (const p of perceived_parcels) {
-		// p is {id, x, y, carriedBy, reward}
-        parcels.set(p.id, p);
-        parcel_timers.set(p.id, Date.now());
-    }
-    for (const [p_id, time] of parcel_timers.entries()){
-        if (Date.now() - time >= PARCEL_DECADING_INTERVAL * PARCEL_REWARD_AVG){
-            parcels.delete(p_id);
-            parcel_timers.delete(p_id);
-            blacklisted_parcels.delete(p_id);
-        }
-    }
-
-    // send parcels to partner to exchange environment information
-    if (partnerId !== undefined && parcels.size > 0 && Date.now() - parcel_timer > 5000){
-        parcel_timer = Date.now();  // send max. every 5s
-
-        var parcelString = `Parcels,${parcels.size},`;
-        for (const [p_id, p] of parcels.entries()){
-            parcelString += `${p.id}-${p.x}-${p.y}-${p.carriedBy}-${p.reward},`
-        }
-        client.say(partnerId, parcelString);
-    }
-} )
-
-function getCurrentCoordinates(){
+// get the current goal of the agent
+function getCurrentGoal(){
     if (myAgent.intention_queue.length > 0){
         if(myAgent.intention_queue[0]?.get_desire() === 'move' || myAgent.intention_queue[0]?.get_desire() === 'go_pick_up' || myAgent.intention_queue[0]?.get_desire() === 'deliver'){
             let array_args = myAgent.intention_queue[0]?.get_args()
@@ -250,6 +211,68 @@ function getCurrentCoordinates(){
     }
 }
 
+
+/**
+* Sensing
+**/
+
+// config parameters
+var AGENTS_OBSERVATION_DISTANCE
+var MOVEMENT_DURATION
+var PARCEL_DECADING_INTERVAL
+var PARCEL_REWARD_AVG
+client.onConfig( (config) => {
+    AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
+    MOVEMENT_DURATION = config.MOVEMENT_DURATION;
+    PARCEL_DECADING_INTERVAL = config.PARCEL_DECADING_INTERVAL == '1s' ? 1000 : 1000000;
+    PARCEL_REWARD_AVG = config.PARCEL_REWARD_AVG;
+
+} );
+
+// myself and my position
+const me = {};
+client.onYou( ( {id, name, x, y, score} ) => {
+        me.id = id;
+        me.name = name;
+        me.x = x;
+        me.y = y;
+        me.score = score;
+} )
+
+// parcels
+let parcel_timer = Date.now();
+const parcels = new Map();
+const parcel_timers = new Map();
+const blacklisted_parcels = new Map();  // the ones we don't want to pick up anymore
+
+client.onParcelsSensing( async ( perceived_parcels ) => {
+    for (const p of perceived_parcels) {
+		// p is {id, x, y, carriedBy, reward}
+        parcels.set(p.id, p);
+        parcel_timers.set(p.id, Date.now());
+    }
+    // check if parcels were not seen in along time, then delete them
+    for (const [p_id, time] of parcel_timers.entries()){
+        if (Date.now() - time >= PARCEL_DECADING_INTERVAL * PARCEL_REWARD_AVG){
+            parcels.delete(p_id);
+            parcel_timers.delete(p_id);
+            blacklisted_parcels.delete(p_id);
+        }
+    }
+
+    // send parcels to partner every 5s
+    if (partnerId !== undefined && parcels.size > 0 && Date.now() - parcel_timer > 5000){
+        parcel_timer = Date.now();  // send max. every 5s
+
+        var parcelString = `Parcels,${parcels.size},`;
+        for (const [_, p] of parcels.entries()){
+            parcelString += `${p.id}-${p.x}-${p.y}-${p.carriedBy}-${p.reward},`
+        }
+        client.say(partnerId, parcelString);
+    }
+} )
+
+// the map tiles
 /**
  * @type {Map<x,Map<y,{x,y,delivery}>}
  */
@@ -257,49 +280,52 @@ const tile = new Map();
 const deliveryTile = new Set();
 
 client.onTile( ( x, y, delivery ) => {
-    if (! tile.has(x)){
+    if (! tile.has(x)){  // add new row
 		tile.set(x, new Map);
 	}      
-    tile.get(x).set(y, {x, y, delivery});
-    if (delivery){
+    tile.get(x).set(y, {x, y, delivery});  // add tile
+
+    if (delivery){  // create separate list of delivery tiles
         deliveryTile.add({x, y});
     }
 } );
 
+// agents
 let agent_timer = Date.now();
 const agents = new Map();
 client.onAgentsSensing ((perceived_agents) =>{
     for (const a of perceived_agents){
-        agents.set(a.id, a);
+        agents.set(a.id, a);  // set agent position
     }
 
-    // send agents to partner to exchange environment information
+    // send agents to partner every 10s
     if (partnerId !== undefined && agents.size > 0 && Date.now() - agent_timer > 10000){
         agent_timer = Date.now();  // send max. every 10s
 
         var agentString = `Agents,${agents.size},`;
-        for (const [a_id, a] of agents.entries()){
+        for (const [_, a] of agents.entries()){
             agentString += `${a.id}-${a.name}-${a.x}-${a.y}-${a.score},`
         }
         client.say(partnerId, agentString);
     }
 })
 
+// message exchange
 let partnerId;
 client.onMsg(async (id, name, msg, reply) => {
-    if (partnerId == undefined && name == 'MunichMafia_1'){
+    if (partnerId == undefined && name == 'MunichMafia_1'){ // receive partner ID for first time
         partnerId = id;
         console.log('PARTNER ID', partnerId)
         client.say(partnerId, 'stop broadcasting your id.')
     }
-    if (id == partnerId && msg === 'stop broadcasting your id.'){
+    if (id == partnerId && msg === 'stop broadcasting your id.'){ // partner tells me to stop broadcasting my ID
         broadcast_id = false;
     }
 
-    if(name === "MunichMafia_1"){
+    if(name === "MunichMafia_1"){ // only react on messages from partner
         let msg_split = msg.split(",");
 
-        // Delivery
+        // Delivery - check if I can go to a certain position
         if(msg_split[2] === 'can you go there?'){
             let reach = await createPddlProblem(parseFloat(msg_split[0]), parseFloat(msg_split[1]))
             if(reach.length > 0){
@@ -310,10 +336,10 @@ client.onMsg(async (id, name, msg, reply) => {
             }
         }
 
-        // Pickup
+        // Pickup - tell my partner where I am going
         if (msg_split[2] == 'where are you going?'){
              // Get the current coordinates of the agent
-            let { x, y } = getCurrentCoordinates();
+            let { x, y } = getCurrentGoal();
             let currentCoordinates = `${x},${y}`;
 
             if (reply) {
@@ -365,8 +391,8 @@ client.onMsg(async (id, name, msg, reply) => {
 });
 
 
-let explore = false;
-let broadcast_id = true;
+let explore = false;  // whether RandomMove should be used
+let broadcast_id = true;  // whether to broadcast my ID
 let shout_timer = Date.now();
 
 /**
@@ -381,21 +407,24 @@ function agentLoop() {
 
 	const options = [];
 
+    // broadcast my ID so my partner gets it - only executed in the beginning
     if (broadcast_id && partnerId === undefined){
-        if (Date.now() - shout_timer > 3000){
+        if (Date.now() - shout_timer > 3000){  // every 3s
             client.shout("HELLO");
             shout_timer = Date.now();
         }
+        
     }
     
+    // Loop over all parcels
 	for (const [p_id, parcel] of parcels.entries()){
-        if (parcel.reward <= 1){
+        if (parcel.reward <= 1){  // if the parcel will disappear soon, ignore it
             parcels.delete(p_id);
             parcel_timers.delete(p_id);
             continue;
         }
 		else if (parcel.carriedBy){
-            if (parcel.carriedBy == me.id){
+            if (parcel.carriedBy == me.id){ // if I have the parcel, deliver it
                 if (deliveryTile.size > 0){
                     options.push({
                         desire: 'deliver',
@@ -404,7 +433,7 @@ function agentLoop() {
                 }
                 continue;
             }
-            else {
+            else {  // if someone else has the parcel, delete it
                 parcels.delete(p_id);
                 parcel_timers.delete(p_id);
                 continue;
@@ -417,7 +446,7 @@ function agentLoop() {
 		});
 	}
 
-    if (explore){
+    if (explore){  // if nothing else is possible, explore the map using RandomMove
         options.push({
             desire: "move",
             args: [select_random_tile_from_map(tile)]
@@ -425,7 +454,7 @@ function agentLoop() {
     }
     
     /**
-     * Select best intention
+     * Select best intention  - choose closest
      */
 	let best_option;
 	let nearest_distance = Number.MAX_VALUE;
@@ -459,7 +488,7 @@ function agentLoop() {
 
 
     /**
-     * Revise/queue intention 
+     * Queue intention 
      */
 	if (best_option){
 		myAgent.queue(best_option.desire, best_option.args);  // simply queue it - no logic yet!
@@ -492,7 +521,6 @@ class Agent {
                     // check if someone (including me) already has the parcel
                     const args = intention.get_args()[0][0];
                     if (parcels.get(args.id) == undefined || parcels.get(args.id).carriedBy != null || blacklisted_parcels.get(args.id) != undefined){
-                        //console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue; 
                     }
 
@@ -521,14 +549,13 @@ class Agent {
                     }
                     if (!carrying_parcels){
                         const args = intention.get_args()[0][0];
-                       // console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue;
                     } 
                 }
                 else if(intention.get_desire() == 'move'){
                     if (!explore){
+                        // check if I still want to explore
                         const args = intention.get_args()[0][0];
-                       // console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue;
                     }
                 }
@@ -556,7 +583,7 @@ class Agent {
 }
 
 const myAgent = new Agent();
-myAgent.intentionLoop();
+myAgent.intentionLoop(); // execute continously
 
 
 /**
@@ -609,11 +636,8 @@ class Intention extends Promise {
 		/**
 		 * Plan selection
 		 */
-		// TODO: how to select best plan?
-		let best_plan;
-		let best_plan_score = Number.MIN_VALUE;
 
-		for (const plan of plans){
+		for (const plan of plans){ // try all applicable plans
 			if (plan.isApplicableTo(this.#desire)){
 				this.#current_plan = plan;
 				console.log('[I] Achieving desire ', this.#desire, ...this.#args, ' with plan ', plan, '.');
@@ -662,6 +686,11 @@ class Plan {
 
 }
 
+
+/**
+ * Plans
+ */
+
 class Delivery extends Plan{
     isApplicableTo ( desire ){
         return desire == 'deliver';
@@ -672,8 +701,9 @@ class Delivery extends Plan{
         let x = array_args['x'];
 		let y = array_args['y'];
     
+        // use subintention to reach delivery tile
         let res = await this.subIntention('go_to', x, y);
-        if (!res){
+        if (!res){ // if I can not reach it
             if (partnerId !== undefined){
                 let reply = await client.ask(partnerId, `${x},${y}`+',can you go there?')
                 
@@ -721,6 +751,7 @@ class GoPickUp extends Plan{
 		let x = array_args['x'];
 		let y = array_args['y'];
 
+        // use subintention to reach parcel tile
         let res = await this.subIntention('go_to', x, y);
         if (!res){
             return false;
@@ -731,7 +762,7 @@ class GoPickUp extends Plan{
     }
 }
 
-class BlindMove extends Plan {
+class PlannedMove extends Plan {
     isApplicableTo ( desire ) {
 		return desire == 'go_to';
     }
@@ -740,8 +771,10 @@ class BlindMove extends Plan {
         try {
             explore = false;
             
+            // use the PDDL solver to find a path
             const path = await createPddlProblem(x, y);
             if (path.length > 0){
+                // execute planned path
                 for (const step of path){
                     if (step.action == 'LEFT'){
                         await client.move('left');
@@ -762,7 +795,7 @@ class BlindMove extends Plan {
         
         } catch(e){
             explore = true;
-            console.log('[BlindMove] Stuck.');
+            console.log('[PlannedMove] Stuck.');
             return false;
         }
     }
@@ -779,10 +812,13 @@ class RandomMove extends Plan {
 		let x = array_args['x'];
 		let y = array_args['y'];
 
+        // use the PDDL solver to find a path
         const path = await createPddlProblem(x, y);
            
         if (path.length > 0){
+            // execute the planned path
             for (const step of path){
+                // If I find another desire, stop and change plan
                 if(myAgent.intention_queue[myAgent.intention_queue.length - 1]?.get_desire() !== 'move' && myAgent.intention_queue[myAgent.intention_queue.length - 1]?.get_desire() !== undefined){
                     console.log("[RandomMove] Parcel found! Changing intention");
                     this.stop(); //parcel found, change plan
@@ -808,7 +844,8 @@ class RandomMove extends Plan {
     }
 }
 
+// push all existing plans to the list of possible plans
 plans.push(new Delivery() )
 plans.push( new GoPickUp() )
-plans.push( new BlindMove() )
+plans.push( new PlannedMove() )
 plans.push( new RandomMove() )

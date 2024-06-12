@@ -22,6 +22,18 @@ var separator = "_";
 let domain = await readFile('./domain-deliveroo.pddl' );
 
 
+function agentIn(x, y){
+    for (const [_, a] of agents.entries()){
+        if (a.x === x && a.y === y){
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+}
+
+
 function generateTileInit(tileMap) {
     let initStr = '';
 
@@ -32,15 +44,25 @@ function generateTileInit(tileMap) {
             // Right relationship
             if (tileMap.has(x + 1) && tileMap.get(x + 1).has(y)) {
                 let rightTile = `${start_char}${x + 1}${separator}${y}`;
-                initStr += `(right ${currentTile} ${rightTile}) `;
-                initStr += `(left ${rightTile} ${currentTile}) `;
+
+                if (!agentIn(x, y)){
+                    initStr += `(left ${rightTile} ${currentTile}) `;
+                }
+                if (!agentIn(x+1, y)){
+                    initStr += `(right ${currentTile} ${rightTile}) `;
+                }      
             }
 
             // Up relationship
             if (tileMap.has(x) && tileMap.get(x).has(y + 1)) {
                 let upTile = `${start_char}${x}${separator}${y + 1}`;
-                initStr += `(down ${upTile} ${currentTile}) `;
-                initStr += `(up ${currentTile} ${upTile}) `;
+
+                if (!agentIn(x, y)){
+                    initStr += `(down ${upTile} ${currentTile}) `;
+                }
+                if (!agentIn(x, y+1)){
+                    initStr += `(up ${currentTile} ${upTile}) `;
+                }  
             }
         }
     }
@@ -57,43 +79,27 @@ function RemoveInvalidObjects(beliefSet) {
     });
   }
 
-async function createPddlProblem(x, y, onMsg){
+async function createPddlProblem(x, y){
     const myBeliefset = new Beliefset();
-    myBeliefset.declare( 'me ' + me.name );
+    myBeliefset.declare( 'me ' + me.name );  // myself
 
-    if (onMsg){
-        myBeliefset.declare( 'at ' + me.name + ' ' + start_char + Math.round(me.x) +  separator + Math.round(me.y));
+    // my position
+    myBeliefset.declare( 'at ' + me.name + ' ' + start_char + Math.round(me.x) +  separator + Math.round(me.y));
 
-        let init = generateTileInit(tile);
-        myBeliefset.declare(init.substring(1, init.length - 1));
-        RemoveInvalidObjects(myBeliefset);
+    let init = generateTileInit(tile);  // the map and other agents
+    myBeliefset.declare(init.substring(1, init.length - 1));
+    RemoveInvalidObjects(myBeliefset);
 
-        var pddlProblem = new PddlProblem(
-            'deliveroo-can_you_go',
-            myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(1).join(" ") + " - tile\n" + "p1" + " - parcel",
-            myBeliefset.toPddlString(),
-            'at ' + me.name + ' ' + start_char + x + separator + y
-            )
-
-    } else {  // this is for go-to
-        myBeliefset.declare( 'at ' + me.name + ' ' + start_char + me.x +  separator + me.y);
-
-        let init = generateTileInit(tile);
-        myBeliefset.declare(init.substring(1, init.length - 1));
-        RemoveInvalidObjects(myBeliefset);
-
-        var pddlProblem = new PddlProblem(
-            'deliveroo-go_to',
-            myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(1).join(" ") + " - tile\n" + "p1" + " - parcel",
-            myBeliefset.toPddlString(),
-            'at ' + me.name + ' ' + start_char + x  + separator + y 
-            )
-    }
+    var pddlProblem = new PddlProblem(
+        'deliveroo-go_to',
+        myBeliefset.objects.at(0) + " - agent\n" + myBeliefset.objects.slice(1).join(" ") + " - tile\n" + "p1" + " - parcel",
+        myBeliefset.toPddlString(),
+        'at ' + me.name + ' ' + start_char + x  + separator + y 
+        )
     
     let problem = pddlProblem.toPddlString();
     var plan = await onlineSolver(domain, problem);
-    return plan;
-    
+    return plan;  
 }
 
 
@@ -165,82 +171,6 @@ function select_random_tile_from_map(map) {
     return select_random_tile(allTiles, weights);
 }
 
-function tileIsFree(x, y){
-    for (const [_, a] of agents.entries()){
-        if (x == a['x'] && y == a['y']){
-            return false;
-        }
-    }
-    return true;
-}
-
-function getNeighbors(x, y) {
-    const neighbors = [];
-
-    if (tile.get(x - 1) != undefined && tile.get(x - 1).get(y) !== undefined && tileIsFree(x, y)) {
-        neighbors.push({ x: x - 1, y });
-    }
-    if (tile.get(x + 1) != undefined && tile.get(x + 1).get(y) !== undefined && tileIsFree(x, y)) {
-        neighbors.push({ x: x + 1, y });
-    }
-    if (tile.get(x) != undefined && tile.get(x).get(y - 1) !== undefined && tileIsFree(x, y)) {
-        neighbors.push({ x, y: y - 1 });
-    }
-    if (tile.get(x) != undefined && tile.get(x).get(y + 1) !== undefined && tileIsFree(x, y)) {
-        neighbors.push({ x, y: y + 1 });
-    }
-
-    return neighbors;
-}
-
-async function moveTowards(x, y) {
-    const dx = x - me.x;
-    const dy = y - me.y;
-
-    if (dx > 0 && tile.get(me.x + 1) != undefined && tileIsFree(x, y)) {
-        await client.move('right');
-    } else if (dx < 0 && tile.get(me.x - 1) != undefined && tileIsFree(x, y)) {
-        await client.move('left');
-    } else if (dy > 0 && tile.get(me.x) != undefined && tile.get(me.x).get(me.y + 1) != undefined && tileIsFree(x, y)) {
-        await client.move('up');
-    } else if (dy < 0 && tile.get(me.x) != undefined && tile.get(me.x).get(me.y - 1) != undefined && tileIsFree(x, y)) {
-        await client.move('down');
-    }
-
-    me.x = x;
-    me.y = y;
-}
-
-async function findPath(start, target) {
-    const queue = [{ position: start, path: [] }];
-    const visited = new Set();
-
-    while (queue.length > 0) {
-        const { position, path } = queue.shift();
-        const { x, y } = position;
-
-        if (x === target.x && y === target.y) {
-            return path;
-        }
-
-        const neighbors = getNeighbors(x, y);
-        
-        for (const neighbor of neighbors) {
-            const { x: nx, y: ny } = neighbor;
-            const key = `${nx},${ny}`;
-
-            if (!visited.has(key)) {
-                visited.add(key);
-                queue.push({ position: neighbor, path: [...path, neighbor] });
-            }
-        }
-    }
-
-    // No path found
-    console.log('[FindPath] No path found.');
-    return [];
-}
-
 
 function getCurrentCoordinates(){
     if (myAgent.intention_queue.length > 0){
@@ -302,7 +232,7 @@ client.onParcelsSensing( async ( perceived_parcels ) => {
         parcel_timers.set(p.id, Date.now());
     }
     for (const [p_id, time] of parcel_timers.entries()){
-        if (Date.now() - time >= PARCEL_REWARD_AVG * PARCEL_DECADING_INTERVAL){
+        if (Date.now() - time >= PARCEL_DECADING_INTERVAL * PARCEL_REWARD_AVG){
             parcels.delete(p_id);
             parcel_timers.delete(p_id);
             blacklisted_parcels.delete(p_id);
@@ -372,7 +302,7 @@ client.onMsg(async (id, name, msg, reply) => {
 
         // Delivery
         if(msg_split[2] === 'can you go there?'){
-            let reach = await createPddlProblem(parseFloat(msg_split[0]), parseFloat(msg_split[1]), true)
+            let reach = await createPddlProblem(parseFloat(msg_split[0]), parseFloat(msg_split[1]))
             
             if(reach.length > 0){
                 reply(String(true));
@@ -407,7 +337,7 @@ client.onMsg(async (id, name, msg, reply) => {
                 var y = parseInt(parcel[2]);
                 var carriedBy;
                 if (parcel[3] === 'null'){
-                    carriedBy = null;
+                    carriedBy = undefined;
                 }
                 else {
                     carriedBy = parcel[3];
@@ -571,7 +501,7 @@ class Agent {
                 if (intention.get_desire() == 'go_pick_up'){
                     // check if someone (including me) already has the parcel
                     const args = intention.get_args()[0][0];
-                    if (parcels.get(args.id) == undefined || parcels.get(args.id).carriedBy != null || blacklisted_parcels.get(args.id) != undefined){
+                    if (parcels.get(args.id) == undefined || parcels.get(args.id).carriedBy != null || blacklisted_parcels.get(args.id) != undefined ){
                         //console.log('[Agent] Discarding desire', intention.get_desire(), args, ', no longer valid.');
                         continue; 
                     }
@@ -703,9 +633,7 @@ class Intention extends Promise {
         return false;
 
     }
-
 }
-
 
 /**
  * Plan library
@@ -795,17 +723,6 @@ class GoPickUp extends Plan{
         }
 
         let pickup_result = await client.pickup();
-
-        /*
-        if (pickup_result){
-            // Update carriedBy info of parcel that was picked up
-            let p = array_args;
-            p.carriedBy = me.id;
-            console.log('[Pickup] Update info', p)
-            parcels.set(array_args['id'], p);
-            console.log(parcels.get(array_args['id']))
-        }
-        */
         return true;
     }
 }
@@ -818,7 +735,7 @@ class BlindMove extends Plan {
     async execute ( x, y ) {
         try {
             explore = false;
-            const path = await createPddlProblem(x, y, false);
+            const path = await createPddlProblem(x, y);
             if (path.length > 0){
                 for (const step of path){
                     if (step.action == 'LEFT'){
@@ -857,28 +774,32 @@ class RandomMove extends Plan {
 		let x = array_args['x'];
 		let y = array_args['y'];
 
-        const start = { x: me.x, y: me.y };
-        const target = { x, y };
-
-        const path = await findPath(start, target);
+        const path = await createPddlProblem(x, y);
            
         if (path.length > 0){
-            
-            for (const { x: nextX, y: nextY } of path) {
+            for (const step of path){
                 if(myAgent.intention_queue[myAgent.intention_queue.length - 1]?.get_desire() !== 'move' && myAgent.intention_queue[myAgent.intention_queue.length - 1]?.get_desire() !== undefined){
-                    //i didn't find a method to continue the expression on the line below
                     console.log("[RandomMove] Parcel found! Changing intention");
                     this.stop(); //parcel found, change plan
                     return true; 
                 }
-                await moveTowards(nextX, nextY);
+                else if (step.action == 'LEFT'){
+                    await client.move('left');
+                }
+                else if (step.action == 'RIGHT'){
+                    await client.move('right');
+                }
+                else if (step.action == 'UP'){
+                    await client.move('up');
+                }
+                else if (step.action == 'DOWN'){
+                    await client.move('down');
+                }
             }
-    
-            console.log('[RandomMove] Target reached.');
+            console.log('[RandomMove] Target reached.')
             return true;
-        }else {
-            return false;
         }
+        return false;
     }
 }
 

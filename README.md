@@ -16,7 +16,7 @@ npm install @unitn-asa/pddl-client@0.0.37
 ```
 
 # Create a basic environment
-Create a file called ".env" and copy and paste
+Create a file called ".env" in the "./Deliveroo.js" directory and copy and paste
 
 ```
 # Passphrase used to generate jwt token

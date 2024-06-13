@@ -34,7 +34,7 @@ npm run dev
 To modify the level you can modify both the .env or the level_1 files
 
 # To run the agent
-After you set the environment go on a terminal and run inside the ASAProject direcotry
+After you set the environment go on a terminal and run inside the ASAProject directory
 ```
 node pizzaAgent
 node strudelAgent

@@ -109,7 +109,6 @@ async function createPddlProblem(x, y){
         )  // the goal
     
     let problem = pddlProblem.toPddlString();
-    console.log(problem);
     var plan = await onlineSolver(domain, problem);  // solve the problem and receive plan
     return plan;  
 }
